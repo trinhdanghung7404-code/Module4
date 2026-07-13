@@ -1,0 +1,5 @@
+image-damage-detection/.venv/
+.venv/
+venv/
+__pycache__/
+*.pyc
