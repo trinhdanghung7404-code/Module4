@@ -1,0 +1,166 @@
+.admin-layout {
+  min-height: 100vh;
+  background: #f5f7fb;
+}
+
+.admin-header {
+  min-height: 82px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 6%;
+  color: white;
+  background: linear-gradient(135deg, #155eef, #123caa);
+  box-shadow: 0 5px 20px rgba(25, 71, 172, 0.2);
+}
+
+.admin-header h2 {
+  margin: 0 0 4px;
+  font-size: 21px;
+}
+
+.admin-header p {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 14px;
+}
+
+.logout-button,
+.back-button {
+  padding: 10px 18px;
+  color: white;
+  background: rgba(255, 255, 255, 0.13);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 9px;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.logout-button:hover,
+.back-button:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.admin-content {
+  width: min(1120px, 90%);
+  margin: 0 auto;
+  padding: 55px 0;
+}
+
+.welcome-section {
+  margin-bottom: 34px;
+}
+
+.welcome-section h1 {
+  margin: 0 0 8px;
+  color: #172033;
+  font-size: 32px;
+}
+
+.welcome-section p {
+  margin: 0;
+  color: #667085;
+}
+
+.management-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 24px;
+}
+
+.management-card {
+  min-height: 165px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  position: relative;
+  padding: 28px;
+  color: inherit;
+  background: white;
+  border: 1px solid #e5eaf2;
+  border-radius: 18px;
+  text-decoration: none;
+  box-shadow: 0 12px 35px rgba(26, 50, 105, 0.08);
+  transition: 0.2s ease;
+}
+
+.management-card:not(.disabled-card):hover {
+  transform: translateY(-4px);
+  border-color: #8bb0fa;
+  box-shadow: 0 18px 42px rgba(26, 73, 173, 0.14);
+}
+
+.card-icon {
+  min-width: 58px;
+  height: 58px;
+  display: grid;
+  place-items: center;
+  color: white;
+  background: linear-gradient(135deg, #2166e8, #1749b5);
+  border-radius: 16px;
+  font-size: 30px;
+}
+
+.management-card h3 {
+  margin: 0 0 8px;
+  color: #172033;
+  font-size: 20px;
+}
+
+.management-card p {
+  margin: 0;
+  color: #697386;
+  line-height: 1.5;
+}
+
+.card-arrow {
+  margin-left: auto;
+  color: #2166e8;
+  font-size: 25px;
+}
+
+.disabled-card {
+  opacity: 0.7;
+}
+
+.coming-soon {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  padding: 5px 9px;
+  color: #667085;
+  background: #f2f4f7;
+  border-radius: 20px;
+  font-size: 12px;
+}
+
+.product-form-card {
+  padding: 34px;
+  background: white;
+  border: 1px solid #e5eaf2;
+  border-radius: 18px;
+  box-shadow: 0 12px 35px rgba(26, 50, 105, 0.08);
+}
+
+.product-form-card h1 {
+  margin-top: 0;
+}
+
+.product-form-card p {
+  color: #667085;
+}
+
+@media (max-width: 700px) {
+  .management-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-header {
+    padding: 15px 20px;
+  }
+
+  .admin-content {
+    width: calc(100% - 36px);
+    padding: 35px 0;
+  }
+}
