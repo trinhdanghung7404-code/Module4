@@ -99,10 +99,19 @@ class TriangleSimilarity:
             product_descriptors,
             return_descriptors,
         )
+        # The old condition compared the combined score with SSIM_THRESHOLD,
+        # so SSIM_THRESHOLD was effectively redundant whenever
+        # SIMILARITY_THRESHOLD was lower. Use the real SSIM metric here and
+        # reject unreliable low-overlap comparisons instead.
+        ssim_score = float(metric_scores.get("ssim", similarity))
+        overlap_ratio = float(metric_scores.get("overlap_ratio", 1.0))
+        comparison_reliable = overlap_ratio >= 0.55
+
         is_damaged = (
-            similarity < self.similarity_threshold
+            comparison_reliable
+            and similarity < self.similarity_threshold
+            and ssim_score < self.ssim_threshold
             and feature_similarity < self.feature_threshold
-            and similarity < self.ssim_threshold
         )
         return ScoredTriangle(
             triangle=triangle,

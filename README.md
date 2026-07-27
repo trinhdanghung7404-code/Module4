@@ -294,33 +294,6 @@ Tải db postpress rồi tự tùy chỉnh
 
 Tạo db 
 
--- 1. Tạo bảng product_image_feature trước
-CREATE TABLE product_image_feature (
-    id SERIAL PRIMARY KEY,
-    image_path TEXT,
-    object_area DOUBLE PRECISION,
-    perimeter DOUBLE PRECISION,
-    width INTEGER,
-    height INTEGER,
-    texture_feature TEXT, -- Đổi từ BYTEA thành TEXT ở đây
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- 2. Tạo bảng return_image_analysis
-CREATE TABLE return_image_analysis (
-    id SERIAL PRIMARY KEY,
-    product_id INTEGER, -- Có thể thiết lập FOREIGN KEY liên kết với bảng sản phẩm nếu cần
-    image_path TEXT,
-    object_area DOUBLE PRECISION,
-    perimeter DOUBLE PRECISION,
-    width INTEGER,
-    height INTEGER,
-    difference_area DOUBLE PRECISION,
-    largest_damage_area DOUBLE PRECISION,
-    damage_score DOUBLE PRECISION,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
 tự config file database.py
 
 
@@ -332,30 +305,6 @@ tự config file database.py
 
 ## 8. Cách chạy
 
-superpoint_extractor.py
-
-sửa hàm để tải superpoint lần đầu
-
-def _load_model(self) -> None:
-        if self._model is not None:
-            return
-
-        from transformers import AutoImageProcessor, SuperPointForKeypointDetection
-
-        print(f"[SuperPointExtractor] Loading model: {self.MODEL_ID}")
-        self._processor = AutoImageProcessor.from_pretrained(
-            self.MODEL_ID,
-            local_files_only=False
-        )
-
-        self._model = SuperPointForKeypointDetection.from_pretrained(
-            self.MODEL_ID,
-            local_files_only=False
-        )
-        self._model.eval()
-        print(f"[SuperPointExtractor] Model loaded successfully (CPU).")
-
-
 Chạy main.py
 
 
@@ -365,16 +314,10 @@ Pipeline
 Option 1: thêm ảnh
 Option 2: chọn ảnh return
 
-```
-set lại
-local_files_only = True
-cho cả 2 dòng
-
 Chạy lại
 Kích hoạt lại moi trường ảo, ví dụ:
 C:\Users\hung\Documents\Module4\image-damage-detection\venv\Scripts\ + activate
 python main.py
-
 ---
 
 ## 9. Cấu hình quan trọng

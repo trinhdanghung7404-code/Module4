@@ -67,12 +67,12 @@ class SuperPointExtractor(BaseFeatureExtractor):
         print(f"[SuperPointExtractor] Loading model: {self.MODEL_ID}")
         self._processor = AutoImageProcessor.from_pretrained(
             self.MODEL_ID,
-            local_files_only=True
+            local_files_only=False
         )
 
         self._model = SuperPointForKeypointDetection.from_pretrained(
             self.MODEL_ID,
-            local_files_only=True
+            local_files_only=False
         )
         self._model.eval()
         print(f"[SuperPointExtractor] Model loaded successfully (CPU).")

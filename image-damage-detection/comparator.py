@@ -2,7 +2,6 @@ from pathlib import Path
 
 import cv2
 import numpy as np
-from scipy.interpolate import RBFInterpolator
 
 from geometry import GeometryFeature
 from mesh_damage_detector import MeshDamageDetector
@@ -12,8 +11,12 @@ from feature_representation import FeatureRepresentation
 
 class DamageComparator:
 
-    ALIGNMENT_METHOD = "tps"
-    TPS_MIN_CONTROL_POINTS = 4
+    # Preprocess already performs the global image registration. This class
+    # keeps the image unchanged and uses SuperPoint + RANSAC only to reject
+    # inconsistent keypoint matches before building the adaptive mesh.
+    ALIGNMENT_METHOD = "preprocessed_no_warp"
+    RANSAC_REPROJECTION_THRESHOLD = 5.0
+    RANSAC_MIN_MATCHES = 4
 
     def __init__(self):
         self.geometry = GeometryFeature()
@@ -107,81 +110,6 @@ class DamageComparator:
         aligned_green[:, :, 1] = aligned_gray
 
         return cv2.addWeighted(product_red, 0.5, aligned_green, 0.5, 0)
-
-    def _fit_tps_inverse_transform(self, product_points, return_points):
-
-        product_points = np.asarray(product_points, dtype=np.float64)
-        return_points = np.asarray(return_points, dtype=np.float64)
-
-        if product_points.ndim != 2 or return_points.ndim != 2:
-            return None
-
-        if product_points.shape[0] != return_points.shape[0] or product_points.shape[0] < 4:
-            return None
-
-        unique_points, unique_indices = np.unique(product_points, axis=0, return_index=True)
-        unique_targets = return_points[unique_indices]
-
-        if unique_points.shape[0] < 4:
-            return None
-
-        smoothing_values = (1e-6, 1e-4, 1e-3, 1e-2)
-
-        for smoothing in smoothing_values:
-            try:
-                x_model = RBFInterpolator(
-                    unique_points,
-                    unique_targets[:, 0],
-                    kernel="thin_plate_spline",
-                    smoothing=smoothing
-                )
-                y_model = RBFInterpolator(
-                    unique_points,
-                    unique_targets[:, 1],
-                    kernel="thin_plate_spline",
-                    smoothing=smoothing
-                )
-
-                def transform(points):
-                    points = np.asarray(points, dtype=np.float64)
-                    return np.column_stack([x_model(points), y_model(points)])
-
-                return transform
-
-            except (np.linalg.LinAlgError, ValueError):
-                continue
-
-        return None
-
-    def _warp_image_with_tps(self, return_image, product_shape, product_points, return_points):
-
-        transform = self._fit_tps_inverse_transform(product_points, return_points)
-
-        if transform is None:
-            return None, None
-
-        height, width = product_shape[:2]
-
-        grid_x, grid_y = np.meshgrid(np.arange(width, dtype=np.float64), np.arange(height, dtype=np.float64))
-        grid_points = np.column_stack([grid_x.ravel(), grid_y.ravel()])
-
-        mapped_points = transform(grid_points)
-        map_x = mapped_points[:, 0].reshape(height, width).astype(np.float32)
-        map_y = mapped_points[:, 1].reshape(height, width).astype(np.float32)
-
-        aligned_return = cv2.remap(
-            return_image,
-            map_x,
-            map_y,
-            interpolation=cv2.INTER_LINEAR,
-            borderMode=cv2.BORDER_CONSTANT,
-            borderValue=0
-        )
-
-        predicted_points = transform(product_points)
-        rmse = float(np.sqrt(np.mean(np.sum((predicted_points - return_points) ** 2, axis=1))))
-
-        return aligned_return, rmse
 
     def _collect_superpoint_match_details(self, product_descriptors, return_descriptors):
 
@@ -324,105 +252,127 @@ class DamageComparator:
             "similarity_score": match_ratio * 100.0
         }
 
-    def _align_return_image_homography(self, product_image, return_image, product_texture, return_texture):
+    def _build_preprocessed_alignment(
+        self,
+        product_image,
+        return_image,
+        product_texture,
+        return_texture,
+    ):
+        """Keep the preprocessed image unchanged and select geometric inliers.
 
-        product_descriptors = np.asarray(product_texture.get("descriptors", []), dtype=np.float32)
-        return_descriptors = np.asarray(return_texture.get("descriptors", []), dtype=np.float32)
-        product_keypoints = np.asarray(product_texture.get("keypoints", []), dtype=np.float32)
-        return_keypoints = np.asarray(return_texture.get("keypoints", []), dtype=np.float32)
+        A homography is estimated only as a RANSAC consistency model for
+        SuperPoint matches. ``cv2.warpPerspective`` and TPS are intentionally
+        not used here. Product and return keypoints therefore remain in the
+        coordinate systems produced by preprocess and are passed directly to
+        the paired mesh.
+        """
+        product_descriptors = np.asarray(
+            product_texture.get("descriptors", []),
+            dtype=np.float32,
+        )
+        return_descriptors = np.asarray(
+            return_texture.get("descriptors", []),
+            dtype=np.float32,
+        )
+        product_keypoints = np.asarray(
+            product_texture.get("keypoints", []),
+            dtype=np.float32,
+        )
+        return_keypoints = np.asarray(
+            return_texture.get("keypoints", []),
+            dtype=np.float32,
+        )
 
-        if (
-            product_descriptors.size == 0
-            or return_descriptors.size == 0
-            or product_keypoints.size == 0
-            or return_keypoints.size == 0
-            or len(product_descriptors.shape) != 2
-            or len(return_descriptors.shape) != 2
-        ):
+        empty_result = {
+            "aligned": True,
+            "image_warp_applied": False,
+            "alignment_method": "preprocessed_no_warp",
+            "inlier_count": 0,
+            "match_strategy": "missing_descriptors",
+            "ratio_threshold": None,
+            "homography_input_matches": 0,
+            "inlier_ratio": 0.0,
+            "selected_matches": [],
+            "inlier_mask": None,
+            "tps_control_points": 0,
+            "tps_rmse": None,
+            "raw_matches": 0,
+            "good_matches": 0,
+            "mean_match_distance": 0.0,
+            "median_match_distance": 0.0,
+            "aligned_return_keypoints": (
+                return_keypoints.tolist()
+                if return_keypoints.ndim == 2
+                else []
+            ),
+            "alignment_selection_reason": "preprocess_is_global_alignment",
+        }
+
+        valid_input = (
+            product_descriptors.ndim == 2
+            and return_descriptors.ndim == 2
+            and product_keypoints.ndim == 2
+            and return_keypoints.ndim == 2
+            and product_descriptors.size > 0
+            and return_descriptors.size > 0
+            and product_keypoints.size > 0
+            and return_keypoints.size > 0
+        )
+        if not valid_input:
             self._log_step(
-                f"Alignment input missing: product_keypoints={len(product_keypoints)}, return_keypoints={len(return_keypoints)}, product_descriptors_shape={product_descriptors.shape}, return_descriptors_shape={return_descriptors.shape}"
+                "Preprocessed alignment: image kept unchanged; "
+                "insufficient descriptors for RANSAC inlier filtering"
             )
-            return return_image, {
-                "aligned": False,
-                "inlier_count": 0,
-                "match_strategy": "missing_descriptors",
-                "homography_input_matches": 0,
-                "inlier_ratio": 0.0,
-                "selected_matches": [],
-                "inlier_mask": None
-            }
+            return return_image.copy(), empty_result
 
         match_details = self._collect_superpoint_match_details(
             product_descriptors,
-            return_descriptors
+            return_descriptors,
         )
-
         selected_matches = match_details["selected_matches"]
-        ratio_threshold = match_details["ratio_threshold"]
-        match_strategy = match_details["match_strategy"]
+        inlier_mask = np.ones(len(selected_matches), dtype=np.uint8)
+        ransac_model_found = False
 
-        self._log_step(
-            f"Homography input: product_keypoints={len(product_keypoints)}, return_keypoints={len(return_keypoints)}, selected_matches={len(selected_matches)}, ratio_threshold={ratio_threshold}, strategy={match_strategy}"
+        if len(selected_matches) >= self.RANSAC_MIN_MATCHES:
+            source_points = np.float32([
+                return_keypoints[match.trainIdx]
+                for match in selected_matches
+                if match.trainIdx < len(return_keypoints)
+                and match.queryIdx < len(product_keypoints)
+            ]).reshape(-1, 1, 2)
+            target_points = np.float32([
+                product_keypoints[match.queryIdx]
+                for match in selected_matches
+                if match.trainIdx < len(return_keypoints)
+                and match.queryIdx < len(product_keypoints)
+            ]).reshape(-1, 1, 2)
+
+            if len(source_points) == len(selected_matches):
+                _, estimated_mask = cv2.findHomography(
+                    source_points,
+                    target_points,
+                    cv2.RANSAC,
+                    self.RANSAC_REPROJECTION_THRESHOLD,
+                )
+                if estimated_mask is not None:
+                    inlier_mask = estimated_mask.ravel().astype(np.uint8)
+                    ransac_model_found = True
+
+        inlier_count = int(np.count_nonzero(inlier_mask))
+        inlier_ratio = inlier_count / max(1, len(selected_matches))
+        mean_distance, median_distance = self._summarize_match_distances(
+            match_details["ratio_matches"]
         )
 
-        if len(selected_matches) < 4:
-            return return_image, {
-                "aligned": False,
-                "inlier_count": len(selected_matches),
-                "match_strategy": match_strategy,
-                "ratio_threshold": ratio_threshold,
-                "homography_input_matches": len(selected_matches),
-                "inlier_ratio": 0.0,
-                "selected_matches": selected_matches,
-                "inlier_mask": None,
-                "aligned_return_keypoints": []
-            }
-
-        source_points = np.float32([return_keypoints[m.trainIdx] for m in selected_matches]).reshape(-1, 1, 2)
-        target_points = np.float32([product_keypoints[m.queryIdx] for m in selected_matches]).reshape(-1, 1, 2)
-
-        homography, inlier_mask = cv2.findHomography(source_points, target_points, cv2.RANSAC, 5.0)
-
-        if homography is None:
-            return return_image, {
-                "aligned": False,
-                "inlier_count": len(selected_matches),
-                "match_strategy": match_strategy,
-                "ratio_threshold": ratio_threshold,
-                "homography_input_matches": len(selected_matches),
-                "inlier_ratio": 0.0,
-                "selected_matches": selected_matches,
-                "inlier_mask": None,
-                "aligned_return_keypoints": []
-            }
-
-        aligned_return = cv2.warpPerspective(
-            return_image,
-            homography,
-            (product_image.shape[1], product_image.shape[0])
-        )
-
-        all_return_keypoints = np.asarray(return_texture.get("keypoints", []), dtype=np.float32)
-        aligned_return_keypoints = []
-        if all_return_keypoints.size > 0 and len(all_return_keypoints.shape) == 2:
-            transformed_keypoints = cv2.perspectiveTransform(all_return_keypoints.reshape(-1, 1, 2), homography)
-            aligned_return_keypoints = transformed_keypoints.reshape(-1, 2).tolist()
-
-        inlier_count = int(inlier_mask.sum()) if inlier_mask is not None else 0
-        homography_input_matches = len(selected_matches)
-        inlier_ratio = inlier_count / max(1, homography_input_matches)
-
-        self._log_step(
-            f"RANSAC inliers: {inlier_count}/{homography_input_matches} (ratio={inlier_ratio:.3f})"
-        )
-
-        return aligned_return, {
+        result = {
             "aligned": True,
-            "alignment_method": "homography",
+            "image_warp_applied": False,
+            "alignment_method": "preprocessed_no_warp",
             "inlier_count": inlier_count,
-            "match_strategy": match_strategy,
-            "ratio_threshold": ratio_threshold,
-            "homography_input_matches": homography_input_matches,
+            "match_strategy": match_details["match_strategy"],
+            "ratio_threshold": match_details["ratio_threshold"],
+            "homography_input_matches": len(selected_matches),
             "inlier_ratio": inlier_ratio,
             "selected_matches": selected_matches,
             "inlier_mask": inlier_mask,
@@ -430,209 +380,32 @@ class DamageComparator:
             "tps_rmse": None,
             "raw_matches": len(match_details["raw_matches"]),
             "good_matches": len(match_details["ratio_matches"]),
-            "mean_match_distance": self._summarize_match_distances(match_details["ratio_matches"])[0],
-            "median_match_distance": self._summarize_match_distances(match_details["ratio_matches"])[1],
-            "aligned_return_keypoints": aligned_return_keypoints,
+            "mean_match_distance": mean_distance,
+            "median_match_distance": median_distance,
+            "aligned_return_keypoints": return_keypoints.tolist(),
+            "alignment_selection_reason": "preprocess_is_global_alignment",
+            "ransac_model_found": ransac_model_found,
         }
 
-    def _align_return_image_tps(self, product_image, return_image, product_texture, return_texture):
-
-        product_descriptors = np.asarray(product_texture.get("descriptors", []), dtype=np.float32)
-        return_descriptors = np.asarray(return_texture.get("descriptors", []), dtype=np.float32)
-        product_keypoints = np.asarray(product_texture.get("keypoints", []), dtype=np.float32)
-        return_keypoints = np.asarray(return_texture.get("keypoints", []), dtype=np.float32)
-
-        if (
-            product_descriptors.size == 0
-            or return_descriptors.size == 0
-            or product_keypoints.size == 0
-            or return_keypoints.size == 0
-            or len(product_descriptors.shape) != 2
-            or len(return_descriptors.shape) != 2
-        ):
-            aligned_return, homography_result = self._align_return_image_homography(
-                product_image,
-                return_image,
-                product_texture,
-                return_texture
-            )
-
-            homography_result.update({
-                "alignment_method": "homography_fallback",
-                "tps_control_points": 0,
-                "tps_rmse": None,
-                "aligned_return_keypoints": [],
-            })
-
-            return aligned_return, homography_result
-
-        match_details = self._collect_superpoint_match_details(product_descriptors, return_descriptors)
-        selected_matches = match_details["selected_matches"]
-        ratio_threshold = match_details["ratio_threshold"]
-        match_strategy = match_details["match_strategy"]
-
         self._log_step(
-            f"TPS input: product_keypoints={len(product_keypoints)}, return_keypoints={len(return_keypoints)}, selected_matches={len(selected_matches)}, ratio_threshold={ratio_threshold}, strategy={match_strategy}"
+            "Preprocessed alignment selected: no image warp; "
+            f"RANSAC inliers={inlier_count}/{len(selected_matches)} "
+            f"(ratio={inlier_ratio:.3f})"
         )
+        return return_image.copy(), result
 
-        if len(selected_matches) < 4:
-            aligned_return, homography_result = self._align_return_image_homography(
-                product_image,
-                return_image,
-                product_texture,
-                return_texture
-            )
-
-            homography_result.update({
-                "alignment_method": "homography_fallback",
-                "tps_control_points": 0,
-                "tps_rmse": None,
-                "match_strategy": match_strategy,
-                "ratio_threshold": ratio_threshold,
-                "raw_matches": len(match_details["raw_matches"]),
-                "good_matches": len(match_details["ratio_matches"]),
-                "mean_match_distance": self._summarize_match_distances(match_details["ratio_matches"])[0],
-                "median_match_distance": self._summarize_match_distances(match_details["ratio_matches"])[1],
-                "aligned_return_keypoints": [],
-            })
-
-            return aligned_return, homography_result
-
-        source_points = np.float32([return_keypoints[m.trainIdx] for m in selected_matches]).reshape(-1, 1, 2)
-        target_points = np.float32([product_keypoints[m.queryIdx] for m in selected_matches]).reshape(-1, 1, 2)
-
-        homography, inlier_mask = cv2.findHomography(source_points, target_points, cv2.RANSAC, 5.0)
-
-        if homography is None:
-            aligned_return, homography_result = self._align_return_image_homography(
-                product_image,
-                return_image,
-                product_texture,
-                return_texture
-            )
-
-            homography_result.update({
-                "alignment_method": "homography_fallback",
-                "tps_control_points": 0,
-                "tps_rmse": None,
-                "match_strategy": match_strategy,
-                "ratio_threshold": ratio_threshold,
-                "raw_matches": len(match_details["raw_matches"]),
-                "good_matches": len(match_details["ratio_matches"]),
-                "mean_match_distance": self._summarize_match_distances(match_details["ratio_matches"])[0],
-                "median_match_distance": self._summarize_match_distances(match_details["ratio_matches"])[1],
-            })
-
-            return aligned_return, homography_result
-
-        inlier_mask = np.asarray(inlier_mask).ravel().astype(bool) if inlier_mask is not None else np.array([], dtype=bool)
-        inlier_source_points = source_points.reshape(-1, 2)[inlier_mask]
-        inlier_target_points = target_points.reshape(-1, 2)[inlier_mask]
-
-        self._log_step(
-            f"TPS RANSAC inliers: {int(inlier_mask.sum())}/{len(selected_matches)}"
-        )
-
-        if inlier_source_points.shape[0] < self.TPS_MIN_CONTROL_POINTS:
-            aligned_return, homography_result = self._align_return_image_homography(
-                product_image,
-                return_image,
-                product_texture,
-                return_texture
-            )
-
-            homography_result.update({
-                "alignment_method": "homography_fallback",
-                "tps_control_points": int(inlier_source_points.shape[0]),
-                "tps_rmse": None,
-                "match_strategy": match_strategy,
-                "ratio_threshold": ratio_threshold,
-                "raw_matches": len(match_details["raw_matches"]),
-                "good_matches": len(match_details["ratio_matches"]),
-                "mean_match_distance": self._summarize_match_distances(match_details["ratio_matches"])[0],
-                "median_match_distance": self._summarize_match_distances(match_details["ratio_matches"])[1],
-                "aligned_return_keypoints": [],
-            })
-
-            return aligned_return, homography_result
-
-        aligned_return, tps_rmse = self._warp_image_with_tps(
-            return_image,
-            product_image.shape,
-            inlier_target_points,
-            inlier_source_points
-        )
-
-        aligned_return_keypoints = []
-        forward_transform = self._fit_tps_inverse_transform(inlier_source_points, inlier_target_points)
-        if forward_transform is not None:
-            all_return_keypoints = np.asarray(return_texture.get("keypoints", []), dtype=np.float32)
-            if all_return_keypoints.size > 0 and len(all_return_keypoints.shape) == 2:
-                transformed_keypoints = forward_transform(all_return_keypoints)
-                aligned_return_keypoints = transformed_keypoints.tolist()
-
-        if aligned_return is None:
-            aligned_return, homography_result = self._align_return_image_homography(
-                product_image,
-                return_image,
-                product_texture,
-                return_texture
-            )
-
-            homography_result.update({
-                "alignment_method": "homography_fallback",
-                "tps_control_points": int(inlier_source_points.shape[0]),
-                "tps_rmse": None,
-                "match_strategy": match_strategy,
-                "ratio_threshold": ratio_threshold,
-                "raw_matches": len(match_details["raw_matches"]),
-                "good_matches": len(match_details["ratio_matches"]),
-                "mean_match_distance": self._summarize_match_distances(match_details["ratio_matches"])[0],
-                "median_match_distance": self._summarize_match_distances(match_details["ratio_matches"])[1],
-                "aligned_return_keypoints": [],
-            })
-
-            return aligned_return, homography_result
-
-        selected_count = len(selected_matches)
-        inlier_count = int(inlier_mask.sum())
-        inlier_ratio = inlier_count / max(1, selected_count)
-        mean_match_distance, median_match_distance = self._summarize_match_distances(match_details["ratio_matches"])
-
-        return aligned_return, {
-            "aligned": True,
-            "alignment_method": "tps",
-            "inlier_count": inlier_count,
-            "match_strategy": match_strategy,
-            "ratio_threshold": ratio_threshold,
-            "homography_input_matches": selected_count,
-            "inlier_ratio": inlier_ratio,
-            "selected_matches": selected_matches,
-            "inlier_mask": inlier_mask,
-            "tps_control_points": int(inlier_source_points.shape[0]),
-            "tps_rmse": tps_rmse,
-            "raw_matches": len(match_details["raw_matches"]),
-            "good_matches": len(match_details["ratio_matches"]),
-            "mean_match_distance": mean_match_distance,
-            "median_match_distance": median_match_distance,
-            "aligned_return_keypoints": aligned_return_keypoints,
-        }
-
-    def _align_return_image(self, product_image, return_image, product_texture, return_texture):
-
-        if self.ALIGNMENT_METHOD.lower() == "homography":
-            return self._align_return_image_homography(
-                product_image,
-                return_image,
-                product_texture,
-                return_texture
-            )
-
-        return self._align_return_image_tps(
+    def _align_return_image(
+        self,
+        product_image,
+        return_image,
+        product_texture,
+        return_texture,
+    ):
+        return self._build_preprocessed_alignment(
             product_image,
             return_image,
             product_texture,
-            return_texture
+            return_texture,
         )
 
     def _save_superpoint_debug_artifacts(self, product_feature, return_feature, match_details, alignment_result, debug_dir):
