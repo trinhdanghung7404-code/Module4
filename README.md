@@ -299,7 +299,68 @@ tự config file database.py
 
 <img width="331" height="181" alt="image" src="https://github.com/user-attachments/assets/683ea357-2de3-4f4c-91a2-070c48281fd4" />
 
+-- =========================
+-- 1. TẠO SEQUENCE
+-- =========================
 
+CREATE SEQUENCE IF NOT EXISTS public.return_image_analysis_id_seq
+    START WITH 1
+    INCREMENT BY 1;
+
+CREATE SEQUENCE IF NOT EXISTS public.product_image_feature_id_seq
+    START WITH 1
+    INCREMENT BY 1;
+
+
+-- =========================
+-- 2. TẠO BẢNG return_image_analysis
+-- =========================
+
+CREATE TABLE IF NOT EXISTS public.return_image_analysis
+(
+    id integer NOT NULL DEFAULT nextval('public.return_image_analysis_id_seq'::regclass),
+    product_id integer,
+    image_path text,
+    object_area double precision,
+    perimeter double precision,
+    width integer,
+    height integer,
+    difference_area double precision,
+    largest_damage_area double precision,
+    created_at timestamp without time zone DEFAULT now(),
+    damage_score double precision,
+    CONSTRAINT return_image_analysis_pkey PRIMARY KEY (id)
+);
+
+ALTER TABLE public.return_image_analysis
+    OWNER TO postgres;
+
+ALTER SEQUENCE public.return_image_analysis_id_seq
+    OWNED BY public.return_image_analysis.id;
+
+
+-- =========================
+-- 3. TẠO BẢNG product_image_feature
+-- =========================
+
+CREATE TABLE IF NOT EXISTS public.product_image_feature
+(
+    id integer NOT NULL DEFAULT nextval('public.product_image_feature_id_seq'::regclass),
+    image_path text,
+    object_area double precision,
+    perimeter double precision,
+    width integer,
+    height integer,
+    texture_feature jsonb,
+    created_at timestamp without time zone DEFAULT now(),
+    CONSTRAINT product_image_feature_pkey PRIMARY KEY (id)
+);
+
+ALTER TABLE public.product_image_feature
+    OWNER TO postgres;
+
+ALTER SEQUENCE public.product_image_feature_id_seq
+    OWNED BY public.product_image_feature.id;
 
 ---
 
