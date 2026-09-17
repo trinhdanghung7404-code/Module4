@@ -1,51 +1,28 @@
-const API_URL =
-  import.meta.env.VITE_API_URL ?? "http://localhost:8080/api/admin";
+import { request } from "./client";
 
-function getErrorMessage(data) {
-  if (typeof data === "string") {
-    return data || "Có lỗi xảy ra";
-  }
-
-  if (data?.message) {
-    return data.message;
-  }
-
-  if (data && typeof data === "object") {
-    return Object.values(data)[0] ?? "Có lỗi xảy ra";
-  }
-
-  return "Có lỗi xảy ra";
-}
-
-async function post(path, payload) {
-  const response = await fetch(`${API_URL}${path}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
-
-  const text = await response.text();
-  let data = text;
-
-  try {
-    data = JSON.parse(text);
-  } catch {
-    // Backend hiện trả chuỗi ở trường hợp thành công.
-  }
-
-  if (!response.ok) {
-    throw new Error(getErrorMessage(data));
-  }
-
-  return data;
-}
-
+/**
+ * loginAdmin trả về nguyên { token, admin } — client không còn nhận một cái hồ sơ
+ * trơ rồi tự coi đó là bằng chứng đã đăng nhập như bản cũ.
+ *
+ * Đăng nhập vẫn là đường công khai duy nhất; /me, /logout và mọi endpoint khác đều
+ * phải kèm token (AdminSessionInterceptor).
+ */
 export function loginAdmin(payload) {
-  return post("/login", payload);
+  return request("/login", { method: "POST", body: payload });
 }
 
+/** Vẫn công khai — xem ghi chú về lỗ hổng này trong AdminController. */
 export function registerAdmin(payload) {
-  return post("/register", payload);
+  return request("/register", { method: "POST", body: payload });
 }
+
+/** Thu hồi phiên trên server. 401 đã được client.js xử tập trung. */
+export function logoutAdmin() {
+  return request("/logout", { method: "POST" });
+}
+
+/** Kiểm tra phiên còn sống hay đã hết hạn. */
+export function fetchAdminProfile() {
+  return request("/me");
+}
+

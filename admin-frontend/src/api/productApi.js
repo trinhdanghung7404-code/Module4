@@ -1,42 +1,30 @@
-const API_URL =
-  import.meta.env.VITE_API_URL ??
-  "http://localhost:8080/api/admin";
+import { request } from "./client";
 
-async function handleResponse(response) {
-  const text = await response.text();
-
-  let data;
-
-  try {
-    data = JSON.parse(text);
-  } catch {
-    data = text;
-  }
-
-  if (!response.ok) {
-    const message =
-      data?.message ||
-      (typeof data === "object" && data !== null
-        ? Object.values(data)[0]
-        : data) ||
-      "Có lỗi xảy ra";
-
-    throw new Error(message);
-  }
-
-  return data;
+/**
+ * Mọi đường ở đây đều cần token admin — client.js gắn header giúp, file này không
+ * được phép tự gọi fetch.
+ *
+ * createProduct/updateProduct gửi FormData: phải truyền `form: true` để client.js
+ * KHÔNG tự đặt Content-Type application/json (boundary của multipart do trình duyệt
+ * viết, đoán tay là sai).
+ */
+export function getProducts() {
+  return request("/products");
 }
 
-export async function getProducts() {
-  const response = await fetch(`${API_URL}/products`);
-  return handleResponse(response);
+export function createProduct(formData) {
+  return request("/products", { method: "POST", body: formData, form: true });
 }
 
-export async function createProduct(formData) {
-  const response = await fetch(`${API_URL}/products`, {
-    method: "POST",
+export function updateProduct(productId, formData) {
+  return request(`/products/${productId}`, {
+    method: "PUT",
     body: formData,
+    form: true,
   });
-
-  return handleResponse(response);
 }
+
+export function deleteProduct(productId) {
+  return request(`/products/${productId}`, { method: "DELETE" });
+}
+

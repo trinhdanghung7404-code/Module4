@@ -34,4 +34,30 @@ public class ProductController {
     public ResponseEntity<List<ProductResponse>> getAll() {
         return ResponseEntity.ok(productService.getAll());
     }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<ProductResponse> getById(
+            @PathVariable Integer id
+    ) {
+        return ResponseEntity.ok(productService.getById(id));
+    }
+
+    @PutMapping(
+            value = "/{id}",
+            consumes = MediaType.MULTIPART_FORM_DATA_VALUE
+    )
+    public ResponseEntity<ProductResponse> update(
+            @PathVariable Integer id,
+            @Valid @ModelAttribute ProductCreateRequest request
+    ) {
+        return ResponseEntity.ok(productService.update(id, request));
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> delete(
+            @PathVariable Integer id
+    ) {
+        productService.delete(id);
+        return ResponseEntity.noContent().build();
+    }
 }

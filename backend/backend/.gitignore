@@ -31,3 +31,7 @@ build/
 
 ### VS Code ###
 .vscode/
+
+# Smoke test trong scripts/ ghi *.log ngay canh script; chi la ket qua chay
+# train may (co ca du lieu probe), khong phai source.
+scripts/*.log

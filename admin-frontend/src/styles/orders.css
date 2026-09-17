@@ -1,0 +1,274 @@
+/* Trang đơn hàng. Nền tảng dùng lại của product.css (container, table-card, modal,
+   toast); file này chỉ thêm những thứ riêng của luồng trạng thái. */
+
+.orders-container {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.order-search {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.order-search input {
+  flex: 1;
+  padding: 9px 12px;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.status-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border: 1px solid #d0d5dd;
+  border-radius: 999px;
+  background: white;
+  color: #344054;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.status-chip:hover {
+  border-color: #205ed8;
+}
+
+.status-chip.active {
+  background: #205ed8;
+  border-color: #205ed8;
+  color: white;
+}
+
+.status-chip__count {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #f2f4f7;
+  color: #667085;
+  font-size: 12px;
+}
+
+.status-chip.active .status-chip__count {
+  background: rgba(255, 255, 255, 0.22);
+  color: white;
+}
+
+/* Nhãn trạng thái: một lớp màu cho một trạng thái, lấy theo đúng 5 giá trị enum. */
+.status-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.status-badge--pending {
+  background: #fffaeb;
+  color: #b54708;
+}
+
+.status-badge--confirmed {
+  background: #eaf1ff;
+  color: #175cd3;
+}
+
+.status-badge--shipping {
+  background: #f9f5ff;
+  color: #6941c6;
+}
+
+.status-badge--delivered {
+  background: #ecfdf3;
+  color: #067647;
+}
+
+.status-badge--cancelled {
+  background: #f2f4f7;
+  color: #667085;
+}
+
+.order-customer strong {
+  display: block;
+  font-size: 14px;
+  color: #172033;
+}
+
+.order-customer span {
+  font-size: 12px;
+  color: #667085;
+}
+
+.order-lines {
+  font-size: 13px;
+  color: #475467;
+}
+
+.order-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.status-action {
+  padding: 6px 11px;
+  border: none;
+  border-radius: 7px;
+  background: #205ed8;
+  color: white;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.status-action:hover {
+  background: #175cd3;
+}
+
+.status-action--danger {
+  background: #fef3f2;
+  color: #b42318;
+  border: 1px solid #fda29b;
+}
+
+.status-action--danger:hover {
+  background: #fee4e2;
+}
+
+.status-action:disabled {
+  opacity: 0.55;
+  cursor: progress;
+}
+
+.pagination-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+  font-size: 13px;
+  color: #667085;
+}
+
+.order-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 18px;
+  margin-bottom: 16px;
+}
+
+.order-detail-grid dt {
+  font-size: 12px;
+  color: #98a2b3;
+}
+
+.order-detail-grid dd {
+  margin: 0 0 4px;
+  font-size: 14px;
+  color: #172033;
+}
+
+.order-detail-lines {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 16px;
+  font-size: 13px;
+}
+
+.order-detail-lines th {
+  text-align: left;
+  padding: 6px 8px;
+  color: #667085;
+  border-bottom: 1px solid #eaecf0;
+}
+
+.order-detail-lines td {
+  padding: 6px 8px;
+  border-bottom: 1px solid #f2f4f7;
+}
+
+.order-detail-lines td.num,
+.order-detail-lines th.num {
+  text-align: right;
+}
+
+/* Timeline đúng là một đường: mỗi bước một chấm, bước gần nhất đậm. */
+.order-timeline {
+  list-style: none;
+  margin: 0 0 16px;
+  padding: 0 0 0 18px;
+  border-left: 2px solid #eaecf0;
+}
+
+.order-timeline__item {
+  position: relative;
+  padding: 0 0 12px 12px;
+}
+
+.order-timeline__item::before {
+  content: "";
+  position: absolute;
+  left: -25px;
+  top: 4px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #d0d5dd;
+}
+
+.order-timeline__item:last-child::before {
+  background: #205ed8;
+}
+
+.order-timeline__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #172033;
+}
+
+.order-timeline__meta {
+  font-size: 12px;
+  color: #667085;
+}
+
+.order-timeline__note {
+  font-size: 12px;
+  color: #b54708;
+}
+
+/* Huy hiệu số đơn chờ xác nhận ngay trên thẻ ở trang chủ. */
+.card-count {
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #fffaeb;
+  color: #b54708;
+  font-size: 12px;
+  font-weight: 600;
+  vertical-align: middle;
+}
+
+.order-detail-heading {
+  margin: 0 0 8px;
+  font-size: 14px;
+  color: #172033;
+}
+
+.order-error {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #fef3f2;
+  color: #b42318;
+  font-size: 13px;
+}

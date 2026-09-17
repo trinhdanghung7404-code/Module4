@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { loginAdmin } from "../api/adminApi";
+import { saveAdminAuth } from "../utils/adminSession";
 import AuthLayout from "../components/AuthLayout";
 
 function LoginPage() {
@@ -22,9 +23,8 @@ function LoginPage() {
     setLoading(true);
 
     try {
-      await loginAdmin(form);
-
-      localStorage.setItem("adminLoggedIn", "true");
+      const auth = await loginAdmin(form);
+      saveAdminAuth(auth);
 
       navigate("/admin", {
         replace: true,

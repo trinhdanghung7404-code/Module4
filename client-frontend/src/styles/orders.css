@@ -1,0 +1,165 @@
+/* ---------------------------------------------------------------------------
+   "Đơn hàng của tôi" — danh sách đứng một mình dưới hai cột sổ người nhận,
+   vì nó dài hơn nhiều và không liên quan tới việc sửa địa chỉ. Một thẻ đơn do
+   OrderCard.jsx vẽ, nên mọi lớp .order* chỉ sống ở file này.
+   --------------------------------------------------------------------------- */
+
+.orders {
+  /* Trước đây khối này nằm ngay dưới hai cột sổ người nhận nên cần margin lớn; giờ
+     nó là nội dung của một mục trong menu, khoảng cách với menu chỉ còn 1.25rem. */
+  margin-top: 1.25rem;
+}
+
+.order-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.order {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.9rem 1rem;
+  background: var(--surface, #fff);
+  display: grid;
+  gap: 0.25rem;
+}
+
+.order__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.order__code {
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.order__status {
+  font-size: 0.78rem;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* Trang thai nao chua co mau rieng cung con doc duoc ten cua no, nen khong can
+   phai cap nhat file nay moi lan them mot gia tri OrderStatus. */
+.order__status--pending {
+  color: #92600a;
+  border-color: #e6c98a;
+  background: #fdf5e3;
+}
+
+.order__status--confirmed,
+.order__status--shipping {
+  color: #1b4f8a;
+  border-color: #a9c8e8;
+  background: #eef5fc;
+}
+
+.order__status--delivered {
+  color: #14663c;
+  border-color: #a4d8bc;
+  background: #eefaf3;
+}
+
+.order__status--cancelled {
+  color: #8f2020;
+  border-color: #e6b0b0;
+  background: #fdeeee;
+}
+
+/* Timeline bon moc. Khong co duong ke noi giua cac moc: ve duong ke thi phai do
+   chieu dai cai dot, va ba gia tri do phai doi theo nhau moi lan sua thong so o
+   day. Bon cot bang nhau doc het du thong tin can hien. */
+.order__steps {
+  list-style: none;
+  margin: 0.4rem 0 0.55rem;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.4rem;
+}
+
+.order__step {
+  display: grid;
+  gap: 0.15rem;
+  justify-items: center;
+  text-align: center;
+  font-size: 0.76rem;
+  color: var(--muted);
+}
+
+.order__step-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: #fff;
+}
+
+.order__step--done {
+  color: #1b4f8a;
+}
+
+.order__step--done .order__step-dot {
+  border-color: #1b4f8a;
+  background: #1b4f8a;
+}
+
+.order__step--current {
+  font-weight: 700;
+}
+
+.order__step--current .order__step-dot {
+  box-shadow: 0 0 0 3px #eef5fc;
+}
+
+.order__step-at {
+  font-size: 0.68rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* Bon cot tren man dien thoai thi moi cot rong ~80px, khong du cho "Giao hang
+   thanh cong" — hai cot de ten moc duoc doc thang thay vi phai nhan giua. */
+@media (max-width: 560px) {
+  .order__steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.6rem 0.4rem;
+  }
+}
+
+/* Don bi huy thi khong con moc nao phia truoc, nen thay timeline bang mot dong:
+   bon moc "Chua toi" sau khi hang da ve kho chi la nhieu chu gian. */
+.order__cancel {
+  margin: 0.4rem 0 0.55rem;
+  font-size: 0.85rem;
+  color: #8f2020;
+}
+
+.order__meta,
+.order__to,
+.order__address,
+.order__ship,
+.order__note {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.order__to strong {
+  color: inherit;
+}
+
+.order__total {
+  margin-top: 0.35rem;
+  font-weight: 700;
+}

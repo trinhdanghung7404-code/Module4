@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { createProduct } from "../api/productApi";
+import {
+  createProduct,
+  updateProduct,
+} from "../api/productApi";
 import {
   createCategory,
   getCategories,
@@ -40,25 +43,98 @@ const imageFields = [
   {
     name: "frontImage",
     label: "Ảnh trước",
+    imageType: "FRONT",
   },
   {
     name: "backImage",
     label: "Ảnh sau",
+    imageType: "BACK",
   },
   {
     name: "leftImage",
     label: "Ảnh trái",
+    imageType: "LEFT",
   },
   {
     name: "rightImage",
     label: "Ảnh phải",
+    imageType: "RIGHT",
   },
 ];
 
-function ProductModal({ open, onClose, onCreated }) {
-  const [form, setForm] = useState(initialForm);
+function revokeBlobPreviews(previews) {
+  Object.values(previews).forEach((preview) => {
+    if (preview?.startsWith("blob:")) {
+      URL.revokeObjectURL(preview);
+    }
+  });
+}
+
+function getProductPreviews(product) {
+  if (!product?.images) {
+    return initialPreviews;
+  }
+
+  return imageFields.reduce(
+    (result, { name, imageType }) => {
+      const image = product.images.find(
+        (item) => item.imageType === imageType
+      );
+
+      result[name] = image?.imageUrl ?? "";
+      return result;
+    },
+    { ...initialPreviews }
+  );
+}
+
+function getProductForm(product) {
+  if (!product) {
+    return initialForm;
+  }
+
+  return {
+    name: product.name ?? "",
+    sku: product.sku ?? "",
+    price: product.price ?? "",
+    quantity: product.quantity ?? "",
+    categoryId: String(
+      product.categoryId ?? product.category?.id ?? ""
+    ),
+    description: product.description ?? "",
+  };
+}
+
+/**
+ * Modal sản phẩm — chi duoc render khi mo (ProductPage quyet dieu do), nen
+ * "mo" cung nghia voi "mounted": form duoc khoi tao tu props ngay lan render dau
+ * tien, va khong con effect nao reset lai nua.
+ *
+ * Vi sao khong giu effect reset: go setState trong luc effect chay xong khien
+ * React render hai lan lien tiep cho mot lan mo modal — lan dau voi form cua san
+ * pham tru do, lan hai moi dung form cua san pham dang mo. Voi mot modal gan 600
+ * dong thi do la cai nhip nhoi that su, va `react-hooks/set-state-in-effect` khong
+ * phan doi thich vu: chi dung cho. Cach React khuyen dung cho "reset state khi
+ * prop doi" la remount — tuc la mot prop `key` o cho goi den, dat trong
+ * ProductPage.
+ */
+function ProductModal({
+  mode = "create",
+  product,
+  onClose,
+  onCreated,
+  onUpdated,
+}) {
+  const isView = mode === "view";
+  const isEdit = mode === "edit";
+
+  const [form, setForm] = useState(() =>
+    isView || isEdit ? getProductForm(product) : initialForm
+  );
   const [files, setFiles] = useState(initialFiles);
-  const [previews, setPreviews] = useState(initialPreviews);
+  const [previews, setPreviews] = useState(() =>
+    isView || isEdit ? getProductPreviews(product) : initialPreviews
+  );
   const [categories, setCategories] = useState([]);
   const [newCategory, setNewCategory] = useState("");
   const [showCategoryForm, setShowCategoryForm] =
@@ -67,40 +143,45 @@ function ProductModal({ open, onClose, onCreated }) {
   const [loading, setLoading] = useState(false);
 
   const fileInputRefs = useRef({});
+  const previewsRef = useRef(previews);
 
+  // Danh muc phai xin tu server, nen day la effect duy nhat o day: no goi ra ben
+  // ngoai React, va setState chi xay ra trong callback tra ve — khong phai trong
+  // luc than effect chay.
   useEffect(() => {
-    if (!open) {
-      return;
+    if (isView) {
+      return undefined;
     }
 
-    setMessage("");
+    let ignored = false;
 
     getCategories()
-      .then(setCategories)
-      .catch((error) => setMessage(error.message));
-  }, [open]);
-
-  useEffect(() => {
-    return () => {
-      Object.values(previews).forEach((preview) => {
-        if (preview) {
-          URL.revokeObjectURL(preview);
+      .then((list) => {
+        if (!ignored) {
+          setCategories(list);
+        }
+      })
+      .catch((error) => {
+        if (!ignored) {
+          setMessage(error.message);
         }
       });
+
+    return () => {
+      ignored = true;
     };
+  }, [isView]);
+
+  useEffect(() => {
+    previewsRef.current = previews;
   }, [previews]);
 
-  if (!open) {
-    return null;
-  }
+  useEffect(() => {
+    return () => revokeBlobPreviews(previewsRef.current);
+  }, []);
 
   const resetForm = () => {
-    Object.values(previews).forEach((preview) => {
-      if (preview) {
-        URL.revokeObjectURL(preview);
-      }
-    });
-
+    revokeBlobPreviews(previews);
     setForm(initialForm);
     setFiles(initialFiles);
     setPreviews(initialPreviews);
@@ -156,7 +237,7 @@ function ProductModal({ open, onClose, onCreated }) {
     setMessage("");
 
     setPreviews((previous) => {
-      if (previous[name]) {
+      if (previous[name]?.startsWith("blob:")) {
         URL.revokeObjectURL(previous[name]);
       }
 
@@ -183,16 +264,11 @@ function ProductModal({ open, onClose, onCreated }) {
     try {
       const category = await createCategory(name);
 
-      setCategories((previous) => [
-        ...previous,
-        category,
-      ]);
-
+      setCategories((previous) => [...previous, category]);
       setForm((previous) => ({
         ...previous,
         categoryId: String(category.id),
       }));
-
       setNewCategory("");
       setShowCategoryForm(false);
       setMessage("");
@@ -203,10 +279,15 @@ function ProductModal({ open, onClose, onCreated }) {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+
+    if (isView) {
+      return;
+    }
+
     setMessage("");
 
     const missingImage = imageFields.find(
-      ({ name }) => !files[name]
+      ({ name }) => !files[name] && !previews[name]
     );
 
     if (missingImage) {
@@ -224,15 +305,25 @@ function ProductModal({ open, onClose, onCreated }) {
     formData.append("description", form.description.trim());
 
     imageFields.forEach(({ name }) => {
-      formData.append(name, files[name]);
+      if (files[name]) {
+        formData.append(name, files[name]);
+      }
     });
 
     setLoading(true);
 
     try {
-      const product = await createProduct(formData);
+      if (isEdit) {
+        const updatedProduct = await updateProduct(
+          product.id,
+          formData
+        );
+        onUpdated(updatedProduct);
+      } else {
+        const createdProduct = await createProduct(formData);
+        onCreated(createdProduct);
+      }
 
-      onCreated(product);
       resetForm();
       onClose();
     } catch (error) {
@@ -242,19 +333,28 @@ function ProductModal({ open, onClose, onCreated }) {
     }
   };
 
+  const title = isView
+    ? "Chi tiết sản phẩm"
+    : isEdit
+      ? "Chỉnh sửa sản phẩm"
+      : "Thêm sản phẩm";
+
+  const description = isView
+    ? "Thông tin và hình ảnh hiện tại của sản phẩm."
+    : isEdit
+      ? "Cập nhật thông tin; chỉ chọn lại ảnh cần thay đổi."
+      : "Nhập thông tin và tải đủ bốn ảnh sản phẩm.";
+
   return (
-    <div
-      className="modal-overlay"
-      onMouseDown={handleClose}
-    >
+    <div className="modal-overlay" onMouseDown={handleClose}>
       <div
         className="product-modal"
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="modal-header">
           <div>
-            <h2>Thêm sản phẩm</h2>
-            <p>Nhập thông tin và tải đủ bốn ảnh sản phẩm.</p>
+            <h2>{title}</h2>
+            <p>{description}</p>
           </div>
 
           <button
@@ -279,6 +379,7 @@ function ProductModal({ open, onClose, onCreated }) {
                 onChange={handleChange}
                 maxLength={150}
                 required
+                disabled={isView}
               />
             </div>
 
@@ -291,6 +392,7 @@ function ProductModal({ open, onClose, onCreated }) {
                 onChange={handleChange}
                 maxLength={50}
                 required
+                disabled={isView}
               />
             </div>
 
@@ -305,6 +407,7 @@ function ProductModal({ open, onClose, onCreated }) {
                 value={form.quantity}
                 onChange={handleChange}
                 required
+                disabled={isView}
               />
             </div>
 
@@ -319,47 +422,57 @@ function ProductModal({ open, onClose, onCreated }) {
                 value={form.price}
                 onChange={handleChange}
                 required
+                disabled={isView}
               />
             </div>
 
             <div className="form-group">
               <label htmlFor="product-category">Danh mục</label>
 
-              <div className="category-control">
-                <select
+              {isView ? (
+                <input
                   id="product-category"
-                  name="categoryId"
-                  value={form.categoryId}
-                  onChange={handleChange}
-                  required
-                >
-                  <option value="">Chọn danh mục</option>
+                  value={product?.categoryName ?? ""}
+                  disabled
+                  readOnly
+                />
+              ) : (
+                <div className="category-control">
+                  <select
+                    id="product-category"
+                    name="categoryId"
+                    value={form.categoryId}
+                    onChange={handleChange}
+                    required
+                  >
+                    <option value="">Chọn danh mục</option>
 
-                  {categories.map((category) => (
-                    <option
-                      key={category.id}
-                      value={category.id}
-                    >
-                      {category.name}
-                    </option>
-                  ))}
-                </select>
+                    {categories.map((category) => (
+                      <option
+                        key={category.id}
+                        value={category.id}
+                      >
+                        {category.name}
+                      </option>
+                    ))}
+                  </select>
 
-                <button
-                  type="button"
-                  className="small-button"
-                  onClick={() =>
-                    setShowCategoryForm(
-                      (previous) => !previous
-                    )
-                  }
-                >
-                  + Mới
-                </button>
-              </div>
+                  <button
+                    type="button"
+                    className="small-button"
+                    onClick={() =>
+                      setShowCategoryForm(
+                        (previous) => !previous
+                      )
+                    }
+                  >
+                    + Mới
+                  </button>
+                </div>
+              )}
             </div>
 
-            {showCategoryForm && (
+            {showCategoryForm && !isView && (
               <div className="quick-category full-column">
                 <input
                   value={newCategory}
@@ -367,7 +480,7 @@ function ProductModal({ open, onClose, onCreated }) {
                     setNewCategory(event.target.value)
                   }
                   placeholder="Tên danh mục mới"
-                  maxLength={100}
+                  maxLength={20}
                 />
 
                 <button
@@ -382,19 +495,25 @@ function ProductModal({ open, onClose, onCreated }) {
             <div className="image-upload-section full-column">
               <div className="image-upload-heading">
                 <label>Ảnh sản phẩm</label>
-                <span>JPG, PNG hoặc WEBP; tối đa 5 MB/ảnh</span>
+                {!isView && (
+                  <span>
+                    JPG, PNG hoặc WEBP; tối đa 5 MB/ảnh
+                  </span>
+                )}
               </div>
 
               <div className="image-upload-grid">
                 {imageFields.map(({ name, label }) => (
                   <label
-                    className="image-upload-box"
+                    className={`image-upload-box${
+                      isView ? " view-only" : ""
+                    }`}
                     key={name}
                   >
                     {previews[name] ? (
                       <img
                         src={previews[name]}
-                        alt={`Xem trước ${label.toLowerCase()}`}
+                        alt={label}
                       />
                     ) : (
                       <div className="image-upload-placeholder">
@@ -403,19 +522,24 @@ function ProductModal({ open, onClose, onCreated }) {
                       </div>
                     )}
 
-                    <input
-                      ref={(element) => {
-                        fileInputRefs.current[name] = element;
-                      }}
-                      name={name}
-                      type="file"
-                      accept="image/jpeg,image/png,image/webp"
-                      onChange={handleFileChange}
-                      required
-                    />
+                    {!isView && (
+                      <input
+                        ref={(element) => {
+                          fileInputRefs.current[name] = element;
+                        }}
+                        name={name}
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        onChange={handleFileChange}
+                        required={mode === "create"}
+                      />
+                    )}
 
                     <span className="image-upload-label">
-                      {files[name]?.name || "Chọn ảnh"}
+                      {isView
+                        ? label
+                        : files[name]?.name ||
+                          (isEdit ? `Đổi ${label.toLowerCase()}` : "Chọn ảnh")}
                     </span>
                   </label>
                 ))}
@@ -431,14 +555,13 @@ function ProductModal({ open, onClose, onCreated }) {
                 value={form.description}
                 onChange={handleChange}
                 maxLength={5000}
+                disabled={isView}
               />
             </div>
           </div>
 
           {message && (
-            <div className="product-error">
-              {message}
-            </div>
+            <div className="product-error">{message}</div>
           )}
 
           <div className="modal-actions">
@@ -448,16 +571,24 @@ function ProductModal({ open, onClose, onCreated }) {
               onClick={handleClose}
               disabled={loading}
             >
-              Hủy
+              {isView ? "Đóng" : "Hủy"}
             </button>
 
-            <button
-              type="submit"
-              className="save-button"
-              disabled={loading}
-            >
-              {loading ? "Đang tải ảnh và lưu..." : "Lưu sản phẩm"}
-            </button>
+            {!isView && (
+              <button
+                type="submit"
+                className="save-button"
+                disabled={loading}
+              >
+                {loading
+                  ? isEdit
+                    ? "Đang cập nhật..."
+                    : "Đang tải ảnh và lưu..."
+                  : isEdit
+                    ? "Lưu thay đổi"
+                    : "Lưu sản phẩm"}
+              </button>
+            )}
           </div>
         </form>
       </div>

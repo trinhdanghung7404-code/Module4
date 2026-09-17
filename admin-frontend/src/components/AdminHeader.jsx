@@ -1,13 +1,7 @@
-import { Link, useNavigate } from "react-router-dom";
+import { Link, NavLink } from "react-router-dom";
+import AdminAccountMenu from "./AdminAccountMenu";
 
 function AdminHeader() {
-  const navigate = useNavigate();
-
-  const handleLogout = () => {
-    localStorage.removeItem("adminLoggedIn");
-    navigate("/login", { replace: true });
-  };
-
   return (
     <header className="admin-header">
       <Link to="/admin" className="admin-brand">
@@ -15,12 +9,34 @@ function AdminHeader() {
       </Link>
 
       <nav className="admin-navigation">
-        <Link to="/admin">Trang chủ</Link>
-        <Link to="/admin/products">Sản phẩm</Link>
+        <NavLink
+          to="/admin/products"
+          className={({ isActive }) =>
+            isActive ? "nav-link active" : "nav-link"
+          }
+        >
+          Sản phẩm
+        </NavLink>
 
-        <button type="button" onClick={handleLogout}>
-          Đăng xuất
-        </button>
+        <NavLink
+          to="/admin/categories"
+          className={({ isActive }) =>
+            isActive ? "nav-link active" : "nav-link"
+          }
+        >
+          Danh mục
+        </NavLink>
+
+        <NavLink
+          to="/admin/orders"
+          className={({ isActive }) =>
+            isActive ? "nav-link active" : "nav-link"
+          }
+        >
+          Đơn hàng
+        </NavLink>
+
+        <AdminAccountMenu />
       </nav>
     </header>
   );

@@ -1,6 +1,17 @@
 import { useEffect, useState } from "react";
-import { getProducts } from "../api/productApi";
+import {
+  deleteProduct,
+  getProducts,
+} from "../api/productApi";
 import ProductModal from "../components/ProductModal";
+import {
+  DeleteIcon,
+  EditIcon,
+  ErrorIcon,
+  SuccessIcon,
+  ViewIcon,
+} from "../components/TableIcons";
+import { formatPrice } from "../utils/format";
 import "../styles/product.css";
 
 function ProductThumbnail({ product }) {
@@ -11,11 +22,7 @@ function ProductThumbnail({ product }) {
   );
 
   if (!frontImage?.imageUrl || failed) {
-    return (
-      <div className="image-placeholder">
-        Không có ảnh
-      </div>
-    );
+    return <div className="image-placeholder">Không có ảnh</div>;
   }
 
   return (
@@ -28,114 +35,123 @@ function ProductThumbnail({ product }) {
   );
 }
 
-function ViewIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      width="18"
-      height="18"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" />
-      <circle cx="12" cy="12" r="3" />
-    </svg>
-  );
-}
+const initialModal = {
+  open: false,
+  mode: "create",
+  product: null,
+};
 
-function EditIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      width="18"
-      height="18"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M12 20h9" />
-      <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z" />
-    </svg>
-  );
-}
-
-function DeleteIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      width="18"
-      height="18"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M3 6h18" />
-      <path d="M8 6V4h8v2" />
-      <path d="M19 6 18 20H6L5 6" />
-      <path d="M10 11v5" />
-      <path d="M14 11v5" />
-    </svg>
-  );
-}
+const initialToast = {
+  message: "",
+  type: "success",
+};
 
 function ProductPage() {
   const [products, setProducts] = useState([]);
-  const [modalOpen, setModalOpen] = useState(false);
-  const [message, setMessage] = useState("");
-  const [messageType, setMessageType] = useState("");
+  const [modal, setModal] = useState(initialModal);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
+  const [toast, setToast] = useState(initialToast);
+  const [loading, setLoading] = useState(true);
+
+  const showToast = (message, type = "success") => {
+    setToast({ message, type });
+  };
+
+  const closeToast = () => {
+    setToast(initialToast);
+  };
 
   useEffect(() => {
     getProducts()
       .then(setProducts)
-      .catch((error) => {
-        setMessage(error.message);
-        setMessageType("error");
-      });
+      .catch((error) => showToast(error.message, "error"))
+      .finally(() => setLoading(false));
   }, []);
 
+  useEffect(() => {
+    if (!toast.message) {
+      return undefined;
+    }
+
+    const timer = window.setTimeout(closeToast, 3500);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
+
+  useEffect(() => {
+    if (!deleteTarget) {
+      return undefined;
+    }
+
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape" && deletingId === null) {
+        setDeleteTarget(null);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [deleteTarget, deletingId]);
+
+  const openModal = (mode, product = null) => {
+    setModal({ open: true, mode, product });
+  };
+
+  const closeModal = () => {
+    setModal(initialModal);
+  };
+
   const handleCreated = (product) => {
-    setProducts((previous) => [
-      product,
-      ...previous,
-    ]);
-
-    setMessage("Thêm sản phẩm thành công");
-    setMessageType("success");
+    setProducts((previous) => [product, ...previous]);
+    showToast("Thêm sản phẩm thành công");
   };
 
-  const handleView = (product) => {
-    setMessage(`Đang chọn xem sản phẩm: ${product.name}`);
-    setMessageType("success");
+  const handleUpdated = (product) => {
+    setProducts((previous) =>
+      previous.map((item) =>
+        item.id === product.id ? product : item
+      )
+    );
+
+    showToast("Cập nhật sản phẩm thành công");
   };
 
-  const handleEdit = (product) => {
-    setMessage(`Đang chọn sửa sản phẩm: ${product.name}`);
-    setMessageType("success");
+  const openDeleteModal = (product) => {
+    setDeleteTarget(product);
   };
 
-  const handleDelete = (product) => {
-    setMessage(`Đang chọn xóa sản phẩm: ${product.name}`);
-    setMessageType("error");
+  const closeDeleteModal = () => {
+    if (deletingId !== null) {
+      return;
+    }
+
+    setDeleteTarget(null);
   };
 
-  const formatPrice = (price) =>
-    new Intl.NumberFormat("vi-VN", {
-      style: "currency",
-      currency: "VND",
-    }).format(Number(price));
+  const handleDelete = async () => {
+    if (!deleteTarget) {
+      return;
+    }
+
+    const product = deleteTarget;
+    setDeletingId(product.id);
+
+    try {
+      await deleteProduct(product.id);
+      setProducts((previous) =>
+        previous.filter((item) => item.id !== product.id)
+      );
+      setDeleteTarget(null);
+      showToast("Xóa sản phẩm thành công");
+    } catch (error) {
+      showToast(error.message, "error");
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   return (
-    <main className="product-page">
+    <div className="product-page">
       <div className="product-container">
         <header className="product-page-header">
           <div>
@@ -146,24 +162,18 @@ function ProductPage() {
           <button
             type="button"
             className="add-product-button"
-            onClick={() => {
-              setMessage("");
-              setMessageType("");
-              setModalOpen(true);
-            }}
+            onClick={() => openModal("create")}
           >
             + Thêm sản phẩm
           </button>
         </header>
 
-        {message && (
-          <div className={`page-message ${messageType}`}>
-            {message}
-          </div>
-        )}
-
         <section className="product-table-card">
-          {products.length === 0 ? (
+          {loading ? (
+            <div className="empty-products">
+              Đang tải danh sách sản phẩm…
+            </div>
+          ) : products.length === 0 ? (
             <div className="empty-products">
               Chưa có sản phẩm nào.
             </div>
@@ -188,7 +198,6 @@ function ProductPage() {
                       <td>
                         <ProductThumbnail product={product} />
                       </td>
-
                       <td>{product.name}</td>
                       <td>{product.sku}</td>
                       <td>{product.categoryName}</td>
@@ -201,7 +210,7 @@ function ProductPage() {
                           className="action-button view-action"
                           title="Xem chi tiết"
                           aria-label={`Xem ${product.name}`}
-                          onClick={() => handleView(product)}
+                          onClick={() => openModal("view", product)}
                         >
                           <ViewIcon />
                         </button>
@@ -211,7 +220,7 @@ function ProductPage() {
                           className="action-button edit-action"
                           title="Chỉnh sửa"
                           aria-label={`Sửa ${product.name}`}
-                          onClick={() => handleEdit(product)}
+                          onClick={() => openModal("edit", product)}
                         >
                           <EditIcon />
                         </button>
@@ -221,7 +230,8 @@ function ProductPage() {
                           className="action-button delete-action"
                           title="Xóa"
                           aria-label={`Xóa ${product.name}`}
-                          onClick={() => handleDelete(product)}
+                          onClick={() => openDeleteModal(product)}
+                          disabled={deletingId === product.id}
                         >
                           <DeleteIcon />
                         </button>
@@ -235,12 +245,93 @@ function ProductPage() {
         </section>
       </div>
 
-      <ProductModal
-        open={modalOpen}
-        onClose={() => setModalOpen(false)}
-        onCreated={handleCreated}
-      />
-    </main>
+      {toast.message && (
+        <div
+          className={`product-toast ${toast.type}`}
+          role="status"
+          aria-live="polite"
+        >
+          <span className="product-toast-icon">
+            {toast.type === "error" ? <ErrorIcon /> : <SuccessIcon />}
+          </span>
+
+          <span className="product-toast-message">{toast.message}</span>
+
+          <button
+            type="button"
+            className="product-toast-close"
+            onClick={closeToast}
+            aria-label="Đóng thông báo"
+          >
+            ×
+          </button>
+        </div>
+      )}
+
+      {deleteTarget && (
+        <div
+          className="delete-confirm-overlay"
+          onMouseDown={closeDeleteModal}
+        >
+          <div
+            className="delete-confirm-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-confirm-title"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="delete-confirm-icon">
+              <DeleteIcon />
+            </div>
+
+            <div className="delete-confirm-content">
+              <h2 id="delete-confirm-title">Xác nhận xóa sản phẩm</h2>
+              <p>
+                Bạn có chắc muốn xóa sản phẩm
+                {" "}
+                <strong>“{deleteTarget.name}”</strong>?
+              </p>
+              <span>Thao tác này không thể hoàn tác.</span>
+            </div>
+
+            <div className="delete-confirm-actions">
+              <button
+                type="button"
+                className="delete-cancel-button"
+                onClick={closeDeleteModal}
+                disabled={deletingId !== null}
+              >
+                Hủy
+              </button>
+
+              <button
+                type="button"
+                className="delete-confirm-button"
+                onClick={handleDelete}
+                disabled={deletingId !== null}
+              >
+                {deletingId !== null ? "Đang xóa..." : "Xóa sản phẩm"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* `key` đổi theo mỗi lần mở: đóng modal là component bị gỡ, mở lại là một
+          ProductModal hoàn toàn mới — không còn form hay ảnh blob còn sót từ lần
+          trước, và vì thế ProductModal không cần effect reset nữa (effect đó gọi
+          setState ngay lúc chạy nên React coi là một lần render thừa). */}
+      {modal.open && (
+        <ProductModal
+          key={`${modal.mode}-${modal.product?.id ?? "new"}`}
+          mode={modal.mode}
+          product={modal.product}
+          onClose={closeModal}
+          onCreated={handleCreated}
+          onUpdated={handleUpdated}
+        />
+      )}
+    </div>
   );
 }
 
