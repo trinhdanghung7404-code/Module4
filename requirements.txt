@@ -1,0 +1,16 @@
+# Core numerical / image processing
+numpy>=1.24,<3
+opencv-contrib-python>=4.8
+scikit-image>=0.22
+scipy>=1.10
+
+# Deep learning / SuperPoint model loading
+# For CUDA builds, install torch/torchvision from the official PyTorch index matching your CUDA version.
+torch>=2.1
+torchvision>=0.16
+transformers>=4.40
+
+# Image I/O and utilities
+Pillow>=10.0
+tqdm>=4.66
+matplotlib>=3.8

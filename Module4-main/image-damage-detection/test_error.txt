@@ -1,0 +1,16 @@
+Traceback (most recent call last):
+  File "C:\Users\Admin\Documents\Module4-main\Module4-main\image-damage-detection\test_run.py", line 29, in <module>
+    result = comparator.compare(product, return_img)
+  File "C:\Users\Admin\Documents\Module4-main\Module4-main\image-damage-detection\comparator.py", line 823, in compare
+    product_image, return_image, product_mask, return_mask, damage_mask, alignment_result, local_matching_result = self._build_damage_mask(
+                                                                                                                   ~~~~~~~~~~~~~~~~~~~~~~~^
+        product_feature,
+        ^^^^^^^^^^^^^^^^
+        return_feature
+        ^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\Admin\Documents\Module4-main\Module4-main\image-damage-detection\comparator.py", line 716, in _build_damage_mask
+    raw_product_image = cv2.imread(product_feature["image_path"])
+                                   ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^
+IndexError: only integers, slices (`:`), ellipsis (`...`), numpy.newaxis (`None`) and integer or boolean arrays are valid indices

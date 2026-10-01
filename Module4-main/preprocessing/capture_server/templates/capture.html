@@ -1,0 +1,984 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Chụp Ảnh Trả Hàng Tự Động</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            background: #000;
+            color: #fff;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Top Header */
+        .header {
+            padding: 12px 16px;
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(8px);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            z-index: 30;
+        }
+        .header-title { font-size: 15px; font-weight: 700; color: #38bdf8; }
+        .progress-dots { display: flex; gap: 8px; }
+        .pdot {
+            width: 10px; height: 10px;
+            border-radius: 50%;
+            background: #334155;
+            transition: all 0.3s;
+        }
+        .pdot.done { background: #22c55e; }
+        .pdot.current { background: #38bdf8; box-shadow: 0 0 8px #38bdf8; transform: scale(1.1); }
+
+        /* Camera Viewport */
+        .camera-area {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+            background: #000;
+        }
+        #video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        /* Target Framing Box (Khung canh bình) */
+        .target-box {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            width: 74%;
+            height: 70%;
+            border: 2px dashed rgba(255, 255, 255, 0.35);
+            border-radius: 20px;
+            pointer-events: none;
+            z-index: 12;
+            transition: border-color 0.25s, box-shadow 0.25s;
+        }
+        .target-box.aligning {
+            border-color: #facc15;
+            border-style: solid;
+            box-shadow: 0 0 15px rgba(250, 204, 21, 0.3);
+        }
+        .target-box.locked {
+            border-color: #22c55e;
+            border-style: solid;
+            box-shadow: 0 0 25px rgba(34, 197, 94, 0.6);
+        }
+
+        /* Ghost Image Overlay */
+        #ghost-overlay {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            width: 70%; height: 66%;
+            object-fit: contain;
+            opacity: 0.40;
+            pointer-events: none;
+            z-index: 10;
+            transition: opacity 0.2s;
+        }
+
+        /* Hidden processing canvas */
+        #proc-canvas, #thumb-canvas { display: none; }
+
+        /* Controls & Guide Bar */
+        .guide-bar {
+            position: absolute;
+            bottom: 0; left: 0; right: 0;
+            padding: 16px 20px 24px 20px;
+            background: linear-gradient(transparent, rgba(15, 23, 42, 0.95) 40%, rgba(15, 23, 42, 1));
+            z-index: 20;
+            text-align: center;
+        }
+        #guide-text {
+            font-size: 16px;
+            font-weight: 600;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+            min-height: 24px;
+            margin-bottom: 8px;
+        }
+
+        /* Calm Progress Bar for Stability Countdown */
+        .timer-wrap {
+            width: 100%;
+            background: #1e293b;
+            border-radius: 8px;
+            height: 8px;
+            overflow: hidden;
+            margin-bottom: 14px;
+        }
+        #timer-bar {
+            height: 100%;
+            width: 0%;
+            background: #38bdf8;
+            border-radius: 8px;
+            transition: width 0.1s linear, background-color 0.2s;
+        }
+        #timer-bar.steady {
+            background: #22c55e;
+            box-shadow: 0 0 10px #22c55e;
+        }
+
+        /* Actions: Manual snap button */
+        .bottom-actions {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 16px;
+        }
+        .snap-btn {
+            background: rgba(255, 255, 255, 0.2);
+            border: 3px solid #fff;
+            color: #fff;
+            padding: 10px 24px;
+            border-radius: 30px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            backdrop-filter: blur(6px);
+            transition: all 0.2s;
+        }
+        .snap-btn:active {
+            background: #fff;
+            color: #000;
+            transform: scale(0.95);
+        }
+
+        /* Opacity control pill */
+        .opacity-pill {
+            position: absolute;
+            top: 14px; right: 14px;
+            background: rgba(0,0,0,0.5);
+            border-radius: 20px;
+            padding: 4px 10px;
+            font-size: 12px;
+            z-index: 25;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .opacity-pill input {
+            width: 60px;
+            accent-color: #38bdf8;
+        }
+
+        /* Flash effect */
+        .flash {
+            position: absolute;
+            inset: 0;
+            background: #fff;
+            z-index: 35;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.1s;
+        }
+        .flash.active { opacity: 0.9; transition: none; }
+
+        /* Transition screen between views */
+        #transition-screen {
+            display: none;
+            position: absolute;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.92);
+            z-index: 40;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 14px;
+            text-align: center;
+            padding: 20px;
+        }
+        #transition-screen.show { display: flex; }
+        .trans-check { font-size: 56px; }
+        .trans-done { font-size: 20px; font-weight: 700; color: #22c55e; }
+        .trans-next { font-size: 17px; color: #94a3b8; line-height: 1.4; }
+        .trans-countdown { font-size: 38px; font-weight: 800; color: #38bdf8; margin-top: 6px; }
+
+        /* All done screen */
+        #done-screen {
+            display: none;
+            position: absolute;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.95);
+            z-index: 50;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            text-align: center;
+            padding: 20px;
+        }
+        #done-screen.show { display: flex; }
+        .done-icon { font-size: 64px; }
+        .done-text { font-size: 22px; font-weight: 700; color: #22c55e; }
+        .done-sub { font-size: 15px; color: #94a3b8; max-width: 300px; line-height: 1.5; }
+    </style>
+</head>
+<body>
+
+    <!-- Header -->
+    <div class="header">
+        <span class="header-title" id="view-title">Mặt Trước</span>
+        <div class="progress-dots" id="progress-dots"></div>
+    </div>
+
+    <!-- Camera Viewport -->
+    <div class="camera-area">
+        <video id="video" autoplay playsinline muted></video>
+        <img id="ghost-overlay" alt="">
+        <canvas id="proc-canvas"></canvas>
+        <canvas id="thumb-canvas" width="32" height="32"></canvas>
+
+        <!-- Khung căn chỉnh bình -->
+        <div class="target-box" id="target-box"></div>
+
+        <!-- Chỉnh độ mờ bóng mờ -->
+        <div class="opacity-pill">
+            <span>Bóng mờ:</span>
+            <input type="range" id="opacity-slider" min="15" max="85" value="40" oninput="setGhostOpacity(this.value)">
+        </div>
+
+        <div class="flash" id="flash"></div>
+
+        <!-- Hướng dẫn & Đếm ngược -->
+        <div class="guide-bar">
+            <div id="guide-text">Đang khởi động camera...</div>
+            <div class="timer-wrap">
+                <div id="timer-bar"></div>
+            </div>
+            <div class="bottom-actions">
+                <button class="snap-btn" id="manual-btn" onclick="triggerManualCapture()">
+                    📸 Bấm Chụp Ngay
+                </button>
+            </div>
+        </div>
+
+        <!-- Màn hình chuyển đổi giữa các góc -->
+        <div id="transition-screen">
+            <div class="trans-check">✅</div>
+            <div class="trans-done" id="trans-done-text"></div>
+            <div class="trans-next" id="trans-next-text"></div>
+            <div class="trans-countdown" id="trans-countdown">3</div>
+        </div>
+
+        <!-- Màn hình hoàn tất -->
+        <div id="done-screen">
+            <div class="done-icon">🎉</div>
+            <div class="done-text">Đã Chụp Đủ 4 Góc!</div>
+            <div class="done-sub">Ảnh đã được gửi lên hệ thống phân tích. Bạn có thể đóng tab này và xem kết quả trên máy tính.</div>
+        </div>
+    </div>
+
+<script>
+// ── Server Variables ────────────────────────────────────────────────────────
+const SESSION_ID = "{{ session_id }}";
+const PRODUCT_ID = "{{ product_id }}";
+const VIEWS = {{ views | tojson }};
+const VIEW_LABELS = {{ view_labels | tojson }};
+const CFG = {{ config | tojson }};
+const GHOST_AVAILABLE = {{ ghost_available | tojson }};
+
+// Thời gian giữ yên bắt buộc trước khi tự chụp (1.6 giây)
+const STABLE_DURATION_MS = (CFG.stable_duration_sec || 1.6) * 1000;
+
+// ── DOM Elements ────────────────────────────────────────────────────────────
+const video = document.getElementById('video');
+const ghost = document.getElementById('ghost-overlay');
+const targetBox = document.getElementById('target-box');
+const guideText = document.getElementById('guide-text');
+const timerBar = document.getElementById('timer-bar');
+const flash = document.getElementById('flash');
+const viewTitle = document.getElementById('view-title');
+const progressDots = document.getElementById('progress-dots');
+const transScreen = document.getElementById('transition-screen');
+const doneScreen = document.getElementById('done-screen');
+const procCanvas = document.getElementById('proc-canvas');
+const thumbCanvas = document.getElementById('thumb-canvas');
+
+// Canvas tính độ tương đồng với bóng mờ ảnh mẫu (Ghost Matching)
+const ghostCanvas = document.createElement('canvas');
+ghostCanvas.width = 64;
+ghostCanvas.height = 64;
+
+const compCanvas = document.createElement('canvas');
+compCanvas.width = 64;
+compCanvas.height = 64;
+
+let ghostTemplate = null;
+
+// ── State ───────────────────────────────────────────────────────────────────
+let currentViewIdx = 0;
+let steadyProgress = 0;      // 0.0 -> 1.0
+let lastTimestamp = 0;
+let prevGray = null;
+let frameBuffer = [];
+let capturedThumbs = [];
+let isUploading = false;
+let animFrame = null;
+
+// ── Peak Hunter (Săn đỉnh Max > Max & Trì hoãn thông minh) ──
+let bestSessionFrame = null;  // Khung hình đạt điểm cao nhất trong suốt quá trình giữ máy
+let lastPeakTime = 0;         // Thời điểm xuất hiện peak mới gần nhất
+let graceHoldStart = 0;       // Thời điểm bắt đầu kích hoạt gia hạn chờ đỉnh
+
+const PROC_W = 160;
+const PROC_H = 120;
+
+// ── Initialize ──────────────────────────────────────────────────────────────
+
+function initDots() {
+    progressDots.innerHTML = '';
+    VIEWS.forEach((v, i) => {
+        const d = document.createElement('div');
+        d.className = 'pdot' + (i === 0 ? ' current' : '');
+        d.id = `dot-${i}`;
+        progressDots.appendChild(d);
+    });
+}
+
+function updateDots() {
+    VIEWS.forEach((_, i) => {
+        const d = document.getElementById(`dot-${i}`);
+        if (!d) return;
+        d.className = 'pdot';
+        if (i < currentViewIdx) d.classList.add('done');
+        if (i === currentViewIdx) d.classList.add('current');
+    });
+}
+
+function loadGhost() {
+    ghostTemplate = null;
+    if (!GHOST_AVAILABLE) {
+        ghost.style.display = 'none';
+        return;
+    }
+    const view = VIEWS[currentViewIdx];
+    ghost.onload = () => {
+        prepareGhostTemplate();
+    };
+    ghost.onerror = () => {
+        ghost.style.display = 'none';
+        ghostTemplate = null;
+    };
+    ghost.src = `/ghost/${PRODUCT_ID}/${view}_nb.png?t=${Date.now()}`;
+    ghost.style.display = 'block';
+}
+
+function setGhostOpacity(val) {
+    ghost.style.opacity = val / 100;
+}
+
+// ── Start Camera (iOS Safari HTTPS Checked) ─────────────────────────────────
+
+async function startCamera() {
+    try {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            throw new Error("Trình duyệt Safari/iOS yêu cầu kết nối HTTPS bảo mật để mở camera. Vui lòng quét mã QR từ link HTTPS!");
+        }
+
+        const stream = await navigator.mediaDevices.getUserMedia({
+            video: {
+                facingMode: 'environment',
+                width: { ideal: 1280 },
+                height: { ideal: 960 }
+            }
+        });
+
+        video.srcObject = stream;
+        await video.play();
+
+        procCanvas.width = PROC_W;
+        procCanvas.height = PROC_H;
+        lastTimestamp = performance.now();
+
+        guideText.textContent = '📦 Đưa bình gốm vào giữa khung ngắm';
+        requestAnimationFrame(loop);
+    } catch (e) {
+        guideText.textContent = '❌ ' + e.message;
+        alert(e.message);
+    }
+}
+
+// ── Main Processing Loop ────────────────────────────────────────────────────
+
+function loop(timestamp) {
+    if (!isUploading && video.readyState >= 2) {
+        processFrame(timestamp || performance.now());
+    }
+    animFrame = requestAnimationFrame(loop);
+}
+
+function processFrame(now) {
+    const ctx = procCanvas.getContext('2d');
+    ctx.drawImage(video, 0, 0, PROC_W, PROC_H);
+    const imgData = ctx.getImageData(0, 0, PROC_W, PROC_H);
+    const gray = toGray(imgData);
+
+    const dt = lastTimestamp ? Math.min(0.2, (now - lastTimestamp) / 1000) : 0.033;
+    lastTimestamp = now;
+
+    // 1. Độ rung camera
+    const motion = calcMotion(gray, prevGray);
+    prevGray = gray;
+
+    // 2. Độ nét trung tâm
+    const sharp = calcCenterSharpness(gray, PROC_W, PROC_H);
+
+    // 3. Độ tương đồng với ảnh mẫu
+    const matchScore = calcGhostMatch();
+
+    // 4. Chói lóa
+    const glare = calcFullGlare(imgData);
+    if (glare > 0.16) {
+        decayProgress(dt, 1.2);
+        targetBox.className = 'target-box aligning';
+        setGuide('⚠️ Ánh sáng bị lóa chói, hãy đổi góc sáng nhẹ');
+        updateTimerBar(steadyProgress);
+        return;
+    }
+
+    const isStationary = motion < 7.2;
+    const isInFocus    = sharp >= 0.08;
+    const matchPct     = Math.round(matchScore * 100);
+    const percent      = Math.round(steadyProgress * 100);
+
+    // ══ CỬA RÀO & SĂN ĐỈNH TƯƠNG ĐỒNG (PEAK HUNTER) ══
+    const vaseInFrame = !ghostTemplate || matchScore >= 0.35;
+    const currentScore = ghostTemplate ? (matchScore * 0.75 + sharp * 0.25) : sharp;
+    const PEAK_WAIT_SEC = 7.0; // Đợi đủ 7 giây sau khi có đỉnh
+
+    if (isStationary && isInFocus && vaseInFrame) {
+        let isNewPeak = false;
+
+        // ── THUẬT TOÁN MAX > MAX: Gặp peak hơn lấy luôn, gặp hơn nữa lấy luôn! ──
+        if (!bestSessionFrame || currentScore > (bestSessionFrame.score + 0.005)) {
+            if (video.videoWidth > 0) {
+                const capCanvas = document.createElement('canvas');
+                capCanvas.width = video.videoWidth;
+                capCanvas.height = video.videoHeight;
+                capCanvas.getContext('2d').drawImage(video, 0, 0);
+
+                bestSessionFrame = {
+                    dataUrl: capCanvas.toDataURL('image/jpeg', 0.95),
+                    score: currentScore,
+                    matchScore: matchScore,
+                    sharp: sharp,
+                    time: now
+                };
+                lastPeakTime = now;
+                isNewPeak = true;
+            }
+        }
+
+        // Đếm ngược đủ 5s KỂ TỪ KHI BẮT ĐƯỢC ĐỈNH GẦN NHẤT:
+        const secSincePeak = lastPeakTime ? Math.max(0, (now - lastPeakTime) / 1000) : 0;
+        steadyProgress = Math.min(1.0, secSincePeak / PEAK_WAIT_SEC);
+
+        const remainSec = Math.max(0, PEAK_WAIT_SEC - secSincePeak).toFixed(1);
+        const bestPct = bestSessionFrame ? Math.round(bestSessionFrame.matchScore * 100) : matchPct;
+
+        targetBox.className = matchPct >= 65 ? 'target-box locked' : 'target-box aligning';
+
+        if (ghostTemplate) {
+            if (isNewPeak || secSincePeak < 0.8) {
+                setGuide(`🚀 ĐÃ BẮT ĐỈNH MỚI: ${bestPct}%! Giữ yên ${remainSec}s để chốt (hoặc săn cao hơn)...`);
+            } else if (bestPct >= 75) {
+                setGuide(`⭐ Đang giữ đỉnh: ${bestPct}% (≥80%) | Đang chốt: còn ${remainSec}s...`);
+            } else {
+                setGuide(`🟢 Đang giữ đỉnh: ${bestPct}% | Còn ${remainSec}s (Dịch chuyển để tìm đỉnh cao hơn)...`);
+            }
+        } else {
+            setGuide(`🟢 Giữ yên máy: còn ${remainSec}s...`);
+        }
+
+    } else if (isStationary && isInFocus && !vaseInFrame) {
+        decayProgress(dt, 0.5);
+        targetBox.className = 'target-box';
+        setGuide(`🔍 Đưa bình vào khung ngắm để bắt đỉnh (${matchPct}%)`);
+
+    } else if (motion < 11.0) {
+        decayProgress(dt, 0.3);
+        targetBox.className = 'target-box aligning';
+        const bestPct = bestSessionFrame ? Math.round(bestSessionFrame.matchScore * 100) : matchPct;
+        setGuide(`🎯 Giữ chắc tay (Đỉnh đã lưu: ${bestPct}%) — đang chờ ổn định...`);
+
+    } else {
+        decayProgress(dt, 0.8);
+        targetBox.className = 'target-box';
+        setGuide('📦 Đưa bình gốm vào giữa khung ngắm');
+    }
+
+    updateTimerBar(steadyProgress);
+
+    // ── KÍCH HOẠT CHỤP: ĐÃ ĐỦ 5 GIÂY SAU KHI GÁN ĐƯỢC ẢNH PEAK CAO NHẤT! ──
+    if (steadyProgress >= 1.0 && bestSessionFrame) {
+        steadyProgress = 0;
+        updateTimerBar(0);
+        triggerCapture();
+    }
+}
+
+function decayProgress(dt, speed) {
+    steadyProgress = Math.max(0, steadyProgress - dt * speed);
+}
+
+function updateTimerBar(val) {
+    const pct = Math.round(val * 100);
+    timerBar.style.width = pct + '%';
+    if (pct > 20) {
+        timerBar.className = 'steady';
+    } else {
+        timerBar.className = '';
+    }
+}
+
+let lastCandidateTime = 0;
+function captureCandidateFrame(matchScore, sharp) {
+    const now = performance.now();
+    if (now - lastCandidateTime < 120) return; // Lấy mẫu tối đa ~8 frame/giây
+    lastCandidateTime = now;
+    if (!video.videoWidth) return;
+
+    const capCanvas = document.createElement('canvas');
+    capCanvas.width = video.videoWidth;
+    capCanvas.height = video.videoHeight;
+    capCanvas.getContext('2d').drawImage(video, 0, 0);
+
+    // Điểm đánh giá: Ưu tiên độ giống ảnh mẫu (75%) + Độ nét (25%)
+    const score = ghostTemplate ? (matchScore * 0.75 + sharp * 0.25) : sharp;
+
+    frameBuffer.push({
+        dataUrl: capCanvas.toDataURL('image/jpeg', 0.94),
+        score: score,
+        matchScore: matchScore,
+        sharp: sharp,
+        time: now
+    });
+
+    // Giữ lại 15 frame ứng viên tốt nhất gần đây
+    if (frameBuffer.length > 15) frameBuffer.shift();
+}
+
+// ── Trigger Capture (Chọn frame đỉnh cao nhất đã bắt được) ──────────────────
+
+async function triggerCapture() {
+    if (isUploading) return;
+    isUploading = true;
+
+    // Bốc frame ĐỈNH CAO NHẤT trong suốt quá trình người dùng căn chỉnh
+    const best = bestSessionFrame || (frameBuffer.length > 0
+        ? frameBuffer.reduce((a, b) => a.score > b.score ? a : b)
+        : captureCurrentVideoFrame());
+
+    const matchInfo = best.matchScore ? ` (${Math.round(best.matchScore * 100)}% đỉnh cao nhất)` : '';
+    setGuide(`🎯 Đã chốt frame đỉnh cao nhất${matchInfo}, đang tải lên...`);
+    await processCapturedFrame(best.dataUrl);
+}
+
+async function triggerManualCapture() {
+    if (isUploading) return;
+    isUploading = true;
+
+    // Kể cả khi bấm chụp tay, vẫn ưu tiên frame đỉnh cao nhất nếu có
+    const best = bestSessionFrame || (frameBuffer.length > 0
+        ? frameBuffer.reduce((a, b) => a.score > b.score ? a : b)
+        : captureCurrentVideoFrame());
+
+    resetSteadyState();
+    const matchInfo = best.matchScore ? ` (${Math.round(best.matchScore * 100)}% đỉnh)` : '';
+    setGuide(`📸 Đã chọn frame đỉnh${matchInfo}...`);
+    await processCapturedFrame(best.dataUrl);
+}
+
+function captureCurrentVideoFrame() {
+    const capCanvas = document.createElement('canvas');
+    capCanvas.width = video.videoWidth || 1280;
+    capCanvas.height = video.videoHeight || 960;
+    capCanvas.getContext('2d').drawImage(video, 0, 0);
+    return { dataUrl: capCanvas.toDataURL('image/jpeg', 0.94), score: 1.0, quality: 1.0 };
+}
+
+async function processCapturedFrame(dataUrl) {
+    const thumb = createThumbnail();
+
+    // 1. Kiểm tra trùng mặt (Duplicate check)
+    if (capturedThumbs.length > 0) {
+        if (isDuplicate(thumb)) {
+            setGuide('⚠️ Góc này trùng với mặt vừa chụp! Hãy xoay bình', 0.3);
+            resetSteadyState();
+            isUploading = false;
+            await sleep(2500);
+            return;
+        }
+    }
+
+    // 2. Hiệu ứng chớp flash
+    flash.classList.add('active');
+    setTimeout(() => flash.classList.remove('active'), 180);
+
+    // Lưu thumbnail để kiểm tra trùng cho góc sau
+    capturedThumbs.push(thumb);
+
+    // 3. Tải lên server
+    setGuide('⏳ Đang tải ảnh lên...', 1.0);
+    const ok = await uploadImage(dataUrl, VIEWS[currentViewIdx]);
+
+    if (ok) {
+        currentViewIdx++;
+        updateDots();
+
+        if (currentViewIdx >= VIEWS.length) {
+            // Đã chụp đủ 4 góc!
+            doneScreen.classList.add('show');
+            cancelAnimationFrame(animFrame);
+        } else {
+            // Hiển thị đếm ngược chuyển góc (3s) để khách xoay bình
+            await showTransition();
+            resetSteadyState();
+            loadGhost();
+            viewTitle.textContent = VIEW_LABELS[VIEWS[currentViewIdx]];
+        }
+    } else {
+        setGuide('❌ Upload lỗi, đang thử lại...', 0.3);
+        resetSteadyState();
+    }
+
+    isUploading = false;
+}
+
+// ── Transition Screen ───────────────────────────────────────────────────────
+
+function showTransition() {
+    return new Promise(resolve => {
+        const doneView = VIEW_LABELS[VIEWS[currentViewIdx - 1]];
+        const nextView = VIEW_LABELS[VIEWS[currentViewIdx]];
+
+        document.getElementById('trans-done-text').textContent = `Đã chụp ${doneView}!`;
+        document.getElementById('trans-next-text').textContent = `Hãy xoay bình sang: ${nextView}`;
+
+        transScreen.classList.add('show');
+
+        let count = 3;
+        const cdEl = document.getElementById('trans-countdown');
+        cdEl.textContent = count;
+
+        const timer = setInterval(() => {
+            count--;
+            if (count <= 0) {
+                clearInterval(timer);
+                transScreen.classList.remove('show');
+                resolve();
+            } else {
+                cdEl.textContent = count;
+            }
+        }, 1000);
+    });
+}
+
+// ── Upload ──────────────────────────────────────────────────────────────────
+
+async function uploadImage(dataUrl, view) {
+    try {
+        const blob = dataUrlToBlob(dataUrl);
+        const form = new FormData();
+        form.append('view', view);
+        form.append('image', blob, `${view}.jpg`);
+
+        const res = await fetch(`/api/upload/${SESSION_ID}`, {
+            method: 'POST',
+            body: form,
+        });
+        const data = await res.json();
+        return data.status === 'ok';
+    } catch (e) {
+        console.error('Upload error:', e);
+        return false;
+    }
+}
+
+// ── Frame Analysis & Motion Detection ───────────────────────────────────────
+
+function resetSteadyState() {
+    steadyProgress = 0;
+    prevGray = null;
+    frameBuffer = [];
+    bestSessionFrame = null;
+    lastPeakTime = 0;
+    graceHoldStart = 0;
+    updateTimerBar(0);
+}
+
+function toGray(imgData) {
+    const d = imgData.data;
+    const gray = new Uint8Array(imgData.width * imgData.height);
+    for (let i = 0; i < gray.length; i++) {
+        const j = i * 4;
+        gray[i] = (d[j] * 77 + d[j+1] * 150 + d[j+2] * 29) >> 8;
+    }
+    return gray;
+}
+
+function calcMotion(curr, prev) {
+    if (!prev || curr.length !== prev.length) return 999;
+    // Vùng trung tâm (20% -> 80% ngang, 15% -> 85% dọc)
+    const minX = Math.floor(PROC_W * 0.20);
+    const maxX = Math.floor(PROC_W * 0.80);
+    const minY = Math.floor(PROC_H * 0.15);
+    const maxY = Math.floor(PROC_H * 0.85);
+
+    let diffSum = 0;
+    let count = 0;
+    for (let y = minY; y < maxY; y += 2) {
+        const row = y * PROC_W;
+        for (let x = minX; x < maxX; x += 2) {
+            diffSum += Math.abs(curr[row + x] - prev[row + x]);
+            count++;
+        }
+    }
+    return count > 0 ? (diffSum / count) : 999;
+}
+
+function calcCenterSharpness(gray, w, h) {
+    const minX = Math.floor(w * 0.25);
+    const maxX = Math.floor(w * 0.75);
+    const minY = Math.floor(h * 0.20);
+    const maxY = Math.floor(h * 0.80);
+
+    let sumSq = 0;
+    let count = 0;
+    for (let y = minY; y < maxY; y += 2) {
+        const row = y * w;
+        for (let x = minX; x < maxX; x += 2) {
+            const idx = row + x;
+            const lap = gray[idx] * 4 - gray[idx - 1] - gray[idx + 1] - gray[idx - w] - gray[idx + w];
+            sumSq += lap * lap;
+            count++;
+        }
+    }
+    if (count === 0) return 0;
+    const variance = sumSq / count;
+    return Math.min(1.0, variance / 200);
+}
+
+function calcFullGlare(imgData) {
+    const d = imgData.data;
+    let glarePixels = 0;
+    const total = imgData.width * imgData.height;
+    for (let i = 0; i < d.length; i += 16) {
+        if (d[i] > 248 && d[i+1] > 248 && d[i+2] > 248) {
+            glarePixels++;
+        }
+    }
+    const sampled = total / 4;
+    return glarePixels / sampled;
+}
+
+// ── Ghost Template Matching (So khớp hình ảnh mẫu) ──────────────────────────
+
+function prepareGhostTemplate() {
+    try {
+        if (!ghost || !ghost.complete || !ghost.naturalWidth) return;
+        const gCtx = ghostCanvas.getContext('2d', { willReadFrequently: true });
+        gCtx.clearRect(0, 0, 64, 64);
+        gCtx.drawImage(ghost, 0, 0, 64, 64);
+        const imgData = gCtx.getImageData(0, 0, 64, 64);
+        const d = imgData.data;
+
+        const gray = new Float32Array(64 * 64);
+        const alpha = new Uint8Array(64 * 64);
+        let alphaCount = 0;
+        let sumVal = 0;
+
+        for (let i = 0; i < 64 * 64; i++) {
+            const j = i * 4;
+            alpha[i] = d[j + 3] > 35 ? 1 : 0;
+            const g = (d[j] * 77 + d[j + 1] * 150 + d[j + 2] * 29) >> 8;
+            gray[i] = g;
+            if (alpha[i]) {
+                alphaCount++;
+                sumVal += g;
+            }
+        }
+
+        if (alphaCount < 50) {
+            ghostTemplate = null;
+            return;
+        }
+
+        const mean = sumVal / alphaCount;
+        let sqDiffSum = 0;
+        for (let i = 0; i < 64 * 64; i++) {
+            if (alpha[i]) {
+                const diff = gray[i] - mean;
+                sqDiffSum += diff * diff;
+            }
+        }
+        const std = Math.sqrt(sqDiffSum / alphaCount) + 1e-4;
+
+        // Sobel gradient magnitude of ghost silhouette & texture
+        const mag = new Float32Array(64 * 64);
+        let magSqSum = 0;
+        for (let y = 1; y < 63; y++) {
+            for (let x = 1; x < 63; x++) {
+                const idx = y * 64 + x;
+                const gx = (alpha[idx + 1] ? gray[idx + 1] : 0) - (alpha[idx - 1] ? gray[idx - 1] : 0);
+                const gy = (alpha[idx + 64] ? gray[idx + 64] : 0) - (alpha[idx - 64] ? gray[idx - 64] : 0);
+                const m = Math.sqrt(gx * gx + gy * gy);
+                mag[idx] = m;
+                magSqSum += m * m;
+            }
+        }
+
+        ghostTemplate = {
+            gray,
+            alpha,
+            alphaCount,
+            mean,
+            std,
+            mag,
+            normMag: Math.sqrt(magSqSum) + 1e-4
+        };
+        console.log(`[Ghost] Template nạp thành công: ${alphaCount} pixels vật thể`);
+    } catch (e) {
+        console.warn('Lỗi prepareGhostTemplate:', e);
+        ghostTemplate = null;
+    }
+}
+
+function calcGhostMatch() {
+    if (!ghostTemplate || !video || !video.videoWidth) return 0.5;
+
+    const compCtx = compCanvas.getContext('2d', { willReadFrequently: true });
+    const vw = video.videoWidth;
+    const vh = video.videoHeight;
+    // Khung ngắm ở giữa tương ứng với vị trí bóng mờ
+    const cropW = Math.round(vw * 0.70);
+    const cropH = Math.round(vh * 0.66);
+    const cropX = Math.round((vw - cropW) / 2);
+    const cropY = Math.round((vh - cropH) / 2);
+
+    compCtx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, 64, 64);
+    const imgData = compCtx.getImageData(0, 0, 64, 64);
+    const d = imgData.data;
+
+    const cGray = new Float32Array(64 * 64);
+    const alpha = ghostTemplate.alpha;
+    const alphaCount = ghostTemplate.alphaCount;
+    let cSum = 0;
+
+    for (let i = 0; i < 64 * 64; i++) {
+        const j = i * 4;
+        const g = (d[j] * 77 + d[j + 1] * 150 + d[j + 2] * 29) >> 8;
+        cGray[i] = g;
+        if (alpha[i]) {
+            cSum += g;
+        }
+    }
+
+    const cMean = cSum / alphaCount;
+    let cSqDiff = 0;
+    let crossDiff = 0;
+    const gGray = ghostTemplate.gray;
+    const gMean = ghostTemplate.mean;
+
+    for (let i = 0; i < 64 * 64; i++) {
+        if (alpha[i]) {
+            const cd = cGray[i] - cMean;
+            const gd = gGray[i] - gMean;
+            cSqDiff += cd * cd;
+            crossDiff += cd * gd;
+        }
+    }
+
+    const cStd = Math.sqrt(cSqDiff / alphaCount) + 1e-4;
+    const ncc = Math.max(0, crossDiff / (alphaCount * cStd * ghostTemplate.std));
+
+    // Gradient Edge Alignment
+    const gMag = ghostTemplate.mag;
+    let dotMag = 0;
+    let cMagSq = 0;
+    for (let y = 1; y < 63; y++) {
+        for (let x = 1; x < 63; x++) {
+            const idx = y * 64 + x;
+            const gx = cGray[idx + 1] - cGray[idx - 1];
+            const gy = cGray[idx + 64] - cGray[idx - 64];
+            const m = Math.sqrt(gx * gx + gy * gy);
+            dotMag += m * gMag[idx];
+            cMagSq += m * m;
+        }
+    }
+    const cNormMag = Math.sqrt(cMagSq) + 1e-4;
+    const edgeCorr = Math.max(0, dotMag / (cNormMag * ghostTemplate.normMag));
+
+    // Điểm trùng khớp: 55% viền dáng + 45% tương quan vân màu (NCC)
+    return Math.min(1.0, 0.55 * edgeCorr + 0.45 * ncc);
+}
+
+// ── Duplicate Detection ─────────────────────────────────────────────────────
+
+function createThumbnail() {
+    const ctx = thumbCanvas.getContext('2d');
+    if (video && video.videoWidth > 0) {
+        ctx.drawImage(video, 0, 0, 32, 32);
+        return new Uint8Array(ctx.getImageData(0, 0, 32, 32).data);
+    }
+    return new Uint8Array(32 * 32 * 4);
+}
+
+function isDuplicate(thumbData) {
+    if (!thumbData || thumbData.length === 0) return false;
+    if (capturedThumbs.length === 0) return false;
+
+    // Chỉ so sánh với THUMBNAIL GẦN NHẤT (không tích luỹ qua nhiều mặt)
+    // Ngưỡng 0.97 — chỉ block nếu gần như giống hệt nhau (cùng góc, cùng khung hình)
+    // Bình xoay 90° sẽ khác đủ để pass
+    const prev = capturedThumbs[capturedThumbs.length - 1];
+    const threshold = CFG.duplicate_threshold || 0.97;
+
+    let diffSum = 0;
+    const pixels = 32 * 32;
+    for (let i = 0; i < pixels; i++) {
+        const j = i * 4;
+        const dr = Math.abs(thumbData[j]   - prev[j]);
+        const dg = Math.abs(thumbData[j+1] - prev[j+1]);
+        const db = Math.abs(thumbData[j+2] - prev[j+2]);
+        diffSum += (dr + dg + db) / 3;
+    }
+    const similarity = 1 - (diffSum / pixels / 255);
+    return similarity > threshold;
+}
+
+// ── Helpers ─────────────────────────────────────────────────────────────────
+
+function setGuide(text, quality) {
+    guideText.textContent = text;
+}
+
+function dataUrlToBlob(dataUrl) {
+    const parts = dataUrl.split(',');
+    const mime = parts[0].match(/:(.*?);/)[1];
+    const b64 = atob(parts[1]);
+    const arr = new Uint8Array(b64.length);
+    for (let i = 0; i < b64.length; i++) arr[i] = b64.charCodeAt(i);
+    return new Blob([arr], { type: mime });
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ── Boot ────────────────────────────────────────────────────────────────────
+initDots();
+viewTitle.textContent = VIEW_LABELS[VIEWS[0]];
+loadGhost();
+startCamera();
+</script>
+</body>
+</html>

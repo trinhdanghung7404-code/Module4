@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hệ Thống Quản Lý Sản Phẩm & Trả Hàng</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: #0f172a;
+            color: #e2e8f0;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            padding: 30px 15px;
+        }
+        .container { max-width: 680px; width: 100%; }
+
+        h1 { font-size: 24px; margin-bottom: 20px; text-align: center; }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            background: #1e293b;
+            border-radius: 12px;
+            padding: 6px;
+            margin-bottom: 20px;
+            gap: 6px;
+        }
+        .tab-btn {
+            flex: 1;
+            padding: 12px;
+            background: transparent;
+            color: #94a3b8;
+            border: none;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .tab-btn.active {
+            background: #3b82f6;
+            color: #fff;
+            box-shadow: 0 2px 8px rgba(59, 130, 246, 0.4);
+        }
+
+        .card {
+            background: #1e293b;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 20px;
+            border: 1px solid #334155;
+        }
+
+        label { display: block; font-size: 14px; color: #94a3b8; margin-bottom: 6px; }
+
+        input[type="text"], select {
+            width: 100%;
+            padding: 12px 14px;
+            background: #0f172a;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            color: #f8fafc;
+            font-size: 15px;
+            outline: none;
+            margin-bottom: 15px;
+        }
+        input[type="text"]:focus, select:focus { border-color: #3b82f6; }
+
+        .btn {
+            display: block;
+            width: 100%;
+            padding: 14px;
+            background: #3b82f6;
+            color: #fff;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .btn:hover { background: #2563eb; }
+        .btn:disabled { background: #475569; cursor: not-allowed; }
+        .btn-success { background: #16a34a; }
+        .btn-success:hover { background: #15803d; }
+
+        /* Grid upload 4 views */
+        .upload-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 18px;
+        }
+        .upload-item {
+            background: #0f172a;
+            border: 2px dashed #334155;
+            border-radius: 10px;
+            padding: 14px;
+            text-align: center;
+            cursor: pointer;
+            position: relative;
+            transition: border-color 0.2s;
+        }
+        .upload-item:hover { border-color: #3b82f6; }
+        .upload-item.has-file { border-color: #22c55e; border-style: solid; }
+        .upload-title { font-size: 14px; font-weight: 600; margin-bottom: 6px; color: #cbd5e1; }
+        .upload-preview {
+            width: 100%;
+            height: 100px;
+            object-fit: contain;
+            border-radius: 6px;
+            display: none;
+            margin-top: 8px;
+            background: #1e293b;
+        }
+        .upload-hint { font-size: 12px; color: #64748b; }
+
+        /* Results / Status */
+        .info-box {
+            background: #0f172a;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 12px 16px;
+            font-size: 13px;
+            color: #cbd5e1;
+            margin-top: 15px;
+            display: none;
+        }
+        .url-box {
+            background: #0f172a;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 10px 14px;
+            font-size: 13px;
+            word-break: break-all;
+            color: #94a3b8;
+            margin-top: 10px;
+        }
+
+        #qr-section { display: none; text-align: center; }
+        #qr-section img { width: 260px; height: 260px; margin: 16px auto; border-radius: 12px; }
+
+        .view-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 0;
+            border-bottom: 1px solid #334155;
+        }
+        .view-row:last-child { border-bottom: none; }
+        .dot {
+            width: 12px; height: 12px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        .dot.pending { background: #475569; }
+        .dot.uploaded { background: #22c55e; }
+        .view-label { flex: 1; font-size: 14px; }
+        .view-status { font-size: 12px; color: #64748b; }
+
+        .complete-banner {
+            background: #166534;
+            border-radius: 10px;
+            padding: 16px;
+            text-align: center;
+            font-weight: 600;
+            margin-top: 16px;
+        }
+
+        /* Ghost image previews */
+        .ghost-preview-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+            margin-top: 15px;
+        }
+        .ghost-card {
+            background: #0f172a;
+            border-radius: 8px;
+            padding: 8px;
+            text-align: center;
+        }
+        .ghost-card img {
+            width: 100%;
+            height: 80px;
+            object-fit: contain;
+            border-radius: 4px;
+            background: #1e293b;
+        }
+        .ghost-card span { font-size: 11px; color: #94a3b8; display: block; margin-top: 4px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📦 Hệ Thống Kiểm Tra Sản Phẩm</h1>
+
+        <!-- Navigation Tabs -->
+        <div class="tabs">
+            <button class="tab-btn active" id="tab-upload-btn" onclick="switchTab('upload')">
+                📤 1. Tải Lên Ảnh Gốc (Admin)
+            </button>
+            <button class="tab-btn" id="tab-qr-btn" onclick="switchTab('qr')">
+                📱 2. Khách Trả Hàng & Quét QR
+            </button>
+        </div>
+
+        <!-- ══════════════ TAB 1: UPLOAD ẢNH GỐC SẢN PHẨM ══════════════ -->
+        <div id="tab-upload-content">
+            <div class="card">
+                <h2 style="font-size:18px; margin-bottom:12px;">📤 Tải Ảnh Gốc 4 Góc & Tạo Bóng Mờ Tự Động</h2>
+                <p style="font-size:13px; color:#94a3b8; margin-bottom:18px;">
+                    Ảnh tải lên sẽ được AI (rembg) tự động tách nền trong suốt và crop sát viền để làm lớp phủ bóng mờ (ghost image) cho điện thoại khi khách chụp.
+                </p>
+
+                <label for="upload-product-id">Mã sản phẩm (Product ID):</label>
+                <input type="text" id="upload-product-id" placeholder="Ví dụ: 1, 2, BinhHoa01..." value="1">
+
+                <div class="upload-grid">
+                    <!-- Trước -->
+                    <div class="upload-item" onclick="document.getElementById('file-truoc').click()">
+                        <div class="upload-title">🔵 Mặt Trước</div>
+                        <div class="upload-hint" id="hint-truoc">Bấm chọn ảnh...</div>
+                        <img class="upload-preview" id="prev-truoc">
+                        <input type="file" id="file-truoc" accept="image/*" style="display:none" onchange="previewFile('truoc')">
+                    </div>
+                    <!-- Sau -->
+                    <div class="upload-item" onclick="document.getElementById('file-sau').click()">
+                        <div class="upload-title">🔵 Mặt Sau</div>
+                        <div class="upload-hint" id="hint-sau">Bấm chọn ảnh...</div>
+                        <img class="upload-preview" id="prev-sau">
+                        <input type="file" id="file-sau" accept="image/*" style="display:none" onchange="previewFile('sau')">
+                    </div>
+                    <!-- Trái -->
+                    <div class="upload-item" onclick="document.getElementById('file-trai').click()">
+                        <div class="upload-title">🔵 Mặt Trái</div>
+                        <div class="upload-hint" id="hint-trai">Bấm chọn ảnh...</div>
+                        <img class="upload-preview" id="prev-trai">
+                        <input type="file" id="file-trai" accept="image/*" style="display:none" onchange="previewFile('trai')">
+                    </div>
+                    <!-- Phải -->
+                    <div class="upload-item" onclick="document.getElementById('file-phai').click()">
+                        <div class="upload-title">🔵 Mặt Phải</div>
+                        <div class="upload-hint" id="hint-phai">Bấm chọn ảnh...</div>
+                        <img class="upload-preview" id="prev-phai">
+                        <input type="file" id="file-phai" accept="image/*" style="display:none" onchange="previewFile('phai')">
+                    </div>
+                </div>
+
+                <button class="btn btn-success" id="upload-btn" onclick="uploadProductImages()">
+                    🚀 Bắt Đầu Tách Nền & Tạo Bóng Mờ Tự Động
+                </button>
+
+                <div class="info-box" id="upload-status-box"></div>
+
+                <!-- Preview Ghost Images Generated -->
+                <div id="ghost-results-section" style="display:none; margin-top:20px;">
+                    <h3 style="font-size:15px; color:#22c55e;">✅ Đã tạo thành công bóng mờ (Ghost Images):</h3>
+                    <div class="ghost-preview-grid" id="ghost-preview-grid"></div>
+                    <button class="btn" style="margin-top:15px;" onclick="goToQRTab()">
+                        👉 Tạo mã QR trả hàng cho sản phẩm này ngay
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ══════════════ TAB 2: KHÁCH TRẢ HÀNG & QUÉT QR ══════════════ -->
+        <div id="tab-qr-content" style="display:none;">
+            <!-- Step 1: Chọn sản phẩm -->
+            <div class="card" id="form-section">
+                <label for="product-id">Chọn mã sản phẩm cần trả hàng:</label>
+                <input type="text" id="product-id" list="existing-products" placeholder="Ví dụ: 1" value="1">
+                <datalist id="existing-products"></datalist>
+
+                <button class="btn" id="create-btn" onclick="createSession()">
+                    📱 Tạo QR để chụp ảnh trả hàng
+                </button>
+            </div>
+
+            <!-- Step 2: Hiện QR -->
+            <div class="card" id="qr-section">
+                <h2 style="font-size:18px; margin-bottom:8px;">📱 Quét mã QR bằng điện thoại</h2>
+                <p style="font-size:13px; color:#94a3b8;">
+                    Mở camera điện thoại → quét mã bên dưới → camera tự mở đúng bóng mờ sản phẩm này
+                </p>
+                <img id="qr-img" alt="QR Code">
+                <div class="url-box" id="capture-url"></div>
+            </div>
+
+            <!-- Step 3: Trạng thái -->
+            <div class="card" id="status-section" style="display:none;">
+                <h2 style="font-size:16px; margin-bottom:12px;">📊 Tiến độ chụp ảnh trên điện thoại</h2>
+                <div id="views-list"></div>
+                <div id="complete-msg" class="complete-banner" style="display:none;">
+                    ✅ Đã chụp đủ 4 góc! Sẵn sàng phân tích khuyết tật.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentSessionId = null;
+        let pollTimer = null;
+
+        // Switch tabs
+        function switchTab(tab) {
+            const isUpload = tab === 'upload';
+            document.getElementById('tab-upload-content').style.display = isUpload ? 'block' : 'none';
+            document.getElementById('tab-qr-content').style.display = isUpload ? 'none' : 'block';
+            document.getElementById('tab-upload-btn').className = 'tab-btn' + (isUpload ? ' active' : '');
+            document.getElementById('tab-qr-btn').className = 'tab-btn' + (!isUpload ? ' active' : '');
+            if (!isUpload) {
+                loadExistingProducts();
+            }
+        }
+
+        function goToQRTab() {
+            const pId = document.getElementById('upload-product-id').value.trim();
+            if (pId) {
+                document.getElementById('product-id').value = pId;
+            }
+            switchTab('qr');
+            createSession();
+        }
+
+        // Preview local image file on select
+        function previewFile(view) {
+            const fileInput = document.getElementById(`file-${view}`);
+            const preview = document.getElementById(`prev-${view}`);
+            const hint = document.getElementById(`hint-${view}`);
+            const item = fileInput.parentElement;
+
+            if (fileInput.files && fileInput.files[0]) {
+                const file = fileInput.files[0];
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    preview.src = e.target.result;
+                    preview.style.display = 'block';
+                    hint.textContent = `Đã chọn: ${file.name.substring(0, 15)}...`;
+                    item.classList.add('has-file');
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        // Upload Product Original Images
+        async function uploadProductImages() {
+            const productId = document.getElementById('upload-product-id').value.trim();
+            if (!productId) {
+                alert('Vui lòng nhập Mã sản phẩm (Product ID)');
+                return;
+            }
+
+            const views = ['truoc', 'sau', 'trai', 'phai'];
+            const formData = new FormData();
+            formData.append('product_id', productId);
+
+            let hasAnyFile = false;
+            views.forEach(v => {
+                const inp = document.getElementById(`file-${v}`);
+                if (inp.files && inp.files[0]) {
+                    formData.append(v, inp.files[0]);
+                    hasAnyFile = true;
+                }
+            });
+
+            if (!hasAnyFile) {
+                alert('Vui lòng chọn ít nhất 1 ảnh góc sản phẩm!');
+                return;
+            }
+
+            const btn = document.getElementById('upload-btn');
+            const statusBox = document.getElementById('upload-status-box');
+            const ghostSec = document.getElementById('ghost-results-section');
+            const ghostGrid = document.getElementById('ghost-preview-grid');
+
+            btn.disabled = true;
+            btn.textContent = '⏳ AI đang bóc nền & xử lý (vui lòng chờ)...';
+            statusBox.style.display = 'block';
+            statusBox.innerHTML = '🔄 Đang tải lên và chạy AI rembg để tạo bóng mờ...';
+            ghostSec.style.display = 'none';
+
+            try {
+                const res = await fetch('/api/product/upload', {
+                    method: 'POST',
+                    body: formData,
+                });
+                const data = await res.json();
+
+                if (data.status === 'ok') {
+                    statusBox.innerHTML = `✅ Đã xử lý thành công <b>${data.processed_count}</b> góc sản phẩm cho Product ID: <b>${data.product_id}</b>`;
+                    ghostGrid.innerHTML = '';
+
+                    const labels = {truoc:'Trước', sau:'Sau', trai:'Trái', phai:'Phải'};
+                    for (const [view, info] of Object.entries(data.results)) {
+                        if (info.status === 'ok') {
+                            const card = document.createElement('div');
+                            card.className = 'ghost-card';
+                            card.innerHTML = `
+                                <img src="${info.ghost_local}?t=${Date.now()}" alt="${labels[view]}">
+                                <span>${labels[view]} (Bóng mờ)</span>
+                            `;
+                            ghostGrid.appendChild(card);
+                        }
+                    }
+                    ghostSec.style.display = 'block';
+                } else {
+                    let errMsg = data.error || '';
+                    if (data.results) {
+                        const errViews = Object.entries(data.results)
+                            .filter(([_, info]) => info.status === 'error')
+                            .map(([v, info]) => `${v}: ${info.message}`);
+                        if (errViews.length > 0) {
+                            errMsg += (errMsg ? ' - ' : '') + errViews.join(' | ');
+                        }
+                    }
+                    statusBox.innerHTML = `❌ Lỗi: ${errMsg || 'Không có ảnh nào được xử lý'}`;
+                }
+            } catch (err) {
+                statusBox.innerHTML = `❌ Lỗi kết nối: ${err.message}`;
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '🚀 Bắt Đầu Tách Nền & Tạo Bóng Mờ Tự Động';
+                loadExistingProducts();
+            }
+        }
+
+        // Load existing products for datalist
+        async function loadExistingProducts() {
+            try {
+                const res = await fetch('/api/products');
+                const data = await res.json();
+                const datalist = document.getElementById('existing-products');
+                datalist.innerHTML = '';
+                if (data.products && data.products.length > 0) {
+                    data.products.forEach(p => {
+                        const opt = document.createElement('option');
+                        opt.value = p.id;
+                        opt.label = `${p.id} (${p.views.join(', ')})`;
+                        datalist.appendChild(opt);
+                    });
+                }
+            } catch (e) {
+                console.warn('Cannot load products:', e);
+            }
+        }
+
+        // Return session & QR creation
+        async function createSession() {
+            const productId = document.getElementById('product-id').value.trim();
+            if (!productId) { alert('Nhập mã sản phẩm'); return; }
+
+            const btn = document.getElementById('create-btn');
+            btn.disabled = true;
+            btn.textContent = '⏳ Đang tạo...';
+
+            try {
+                const form = new FormData();
+                form.append('product_id', productId);
+
+                const res = await fetch('/api/session', { method: 'POST', body: form });
+                const data = await res.json();
+
+                currentSessionId = data.session_id;
+
+                // Hiện QR
+                document.getElementById('qr-img').src = data.qr_base64;
+                document.getElementById('capture-url').textContent = data.capture_url;
+                document.getElementById('qr-section').style.display = 'block';
+
+                // Hiện status
+                document.getElementById('status-section').style.display = 'block';
+                renderViews({});
+
+                // Bắt đầu polling
+                startPolling();
+
+                btn.textContent = '✅ Đã tạo QR';
+            } catch (e) {
+                alert('Lỗi: ' + e.message);
+                btn.disabled = false;
+                btn.textContent = '📱 Tạo QR để chụp ảnh trả hàng';
+            }
+        }
+
+        function renderViews(views) {
+            const labels = {truoc:'Mặt Trước', sau:'Mặt Sau', trai:'Mặt Trái', phai:'Mặt Phải'};
+            const list = document.getElementById('views-list');
+            list.innerHTML = '';
+
+            for (const [key, label] of Object.entries(labels)) {
+                const info = views[key] || {status:'pending'};
+                const row = document.createElement('div');
+                row.className = 'view-row';
+                row.innerHTML = `
+                    <div class="dot ${info.status}"></div>
+                    <span class="view-label">${label}</span>
+                    <span class="view-status">${info.status === 'uploaded' ? '✅ Đã chụp' : '⏳ Chờ...'}</span>
+                `;
+                list.appendChild(row);
+            }
+        }
+
+        function startPolling() {
+            if (pollTimer) clearInterval(pollTimer);
+            pollTimer = setInterval(async () => {
+                if (!currentSessionId) return;
+                try {
+                    const res = await fetch(`/api/session/${currentSessionId}/status`);
+                    if (!res.ok) {
+                        clearInterval(pollTimer);
+                        return;
+                    }
+                    const data = await res.json();
+                    if (data.views) {
+                        renderViews(data.views);
+                    }
+
+                    if (data.status === 'complete') {
+                        clearInterval(pollTimer);
+
+                        // Hiện nút xem kết quả + tự mở trang result
+                        const completeEl = document.getElementById('complete-msg');
+                        completeEl.innerHTML = `
+                            <div style="color:#22c55e;font-size:18px;font-weight:700;margin-bottom:12px;">
+                                🎉 Đã chụp đủ 4 góc!
+                            </div>
+                            <a href="/result/${currentSessionId}" target="_blank"
+                               style="display:inline-block;padding:12px 28px;background:#3b82f6;
+                                      color:#fff;border-radius:10px;font-size:15px;font-weight:700;
+                                      text-decoration:none;">
+                                📊 Xem Kết Quả &amp; So Sánh Ảnh →
+                            </a>
+                        `;
+                        completeEl.style.display = 'block';
+
+                        // Tự mở sau 1 giây (delay nhỏ để server kịp render)
+                        setTimeout(() => {
+                            window.open(`/result/${currentSessionId}`, '_blank');
+                        }, 1000);
+                    }
+                } catch (e) {
+                    console.error('Poll error:', e);
+                }
+            }, 2000);
+        }
+
+        window.addEventListener('load', loadExistingProducts);
+    </script>
+</body>
+</html>

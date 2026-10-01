@@ -1,0 +1,9 @@
+# Môi trường ảo (chặn cả .venv và venv)
+.venv/
+venv/
+ENV/
+env/
+
+# Python cache
+__pycache__/
+*.pyc

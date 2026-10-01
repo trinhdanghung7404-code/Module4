@@ -1,0 +1,32 @@
+=== SUMMARY OF CHANGES TO REDUCE FALSE POSITIVE ===
+
+CHANGE 1: Binary Severity (no interpolation)
+File: mesh_damage_detector.py line ~1564-1567
+Before: severity = int(np.clip((1.0 - result.similarity) * 255.0, 1, 255))
+After:  severity = 255 (binary only for damaged triangles)
+Reason: Prevents gray interpolation from "somewhat damaged" triangles
+
+CHANGE 2: Disabled morphological operations
+File: mesh_damage_detector.py line ~1611-1623
+Before: kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+        mesh_damage_map = cv2.morphologyEx(..., MORPH_OPEN, ...)
+        mesh_damage_map = cv2.morphologyEx(..., MORPH_CLOSE, ...)
+After:  DISABLED (lines commented out)
+Reason: Morphology spreads gray damage regions into false positives
+
+THRESHOLDS ALREADY SET:
+- VOTE_SIMILARITY_THRESHOLD = 0.88
+- VOTE_SSIM_THRESHOLD = 0.88
+- VOTE_FEATURE_THRESHOLD = 0.85
+- VOTING_MODE = strict_unanimous (need 3/3 votes)
+
+EXPECTED RESULTS:
+- Damage score should drop from 3% to <1%
+- Gray areas in damage mask should disappear
+- Only clear damage spots (white) will remain if any
+
+TEST INSTRUCTIONS:
+1. Activate venv: C:\Users\Admin\Documents\Module4-main\.venv\Scripts\activate.ps1
+2. Run: python main.py
+3. Load images 1.jpg vs 2.jpg
+4. Check Damage Score and debug_outputs/*_damage_mask.png

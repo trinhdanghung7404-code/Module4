@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Module Chụp Ảnh Trả Hàng</title>
+    <style>
+        body {
+            margin: 0;
+            background-color: #111;
+            color: white;
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .selection-panel {
+            width: 100%;
+            max-width: 500px;
+            padding: 10px 15px;
+            box-sizing: border-box;
+            display: flex;
+            gap: 10px;
+            z-index: 20;
+        }
+
+        .custom-select {
+            flex: 1;
+            padding: 10px;
+            background-color: #333;
+            color: white;
+            border: 1px solid #555;
+            border-radius: 8px;
+            font-size: 15px;
+            outline: none;
+            cursor: pointer;
+        }
+
+        .custom-select:focus {
+            border-color: #007bff;
+        }
+
+        .camera-wrapper {
+            position: relative;
+            width: 100%;
+            max-width: 500px;
+            height: 60vh;
+            background: #000;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        #camera-stream {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        #ghost-image {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 90%;
+            height: 90%;
+            object-fit: contain;
+            opacity: 0.5;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .controls {
+            margin-top: 15px;
+            text-align: center;
+            width: 100%;
+            max-width: 400px;
+        }
+
+        .instruction {
+            font-size: 14px;
+            margin-bottom: 10px;
+            color: #ffcc00;
+            padding: 0 10px;
+        }
+
+        #opacity-slider {
+            width: 80%;
+            margin: 5px 0 15px 0;
+            accent-color: #28a745;
+        }
+
+        #capture-btn {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 18px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-weight: bold;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        }
+
+        #capture-btn:active {
+            background-color: #0056b3;
+            transform: scale(0.95);
+        }
+
+        #canvas-output {
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="selection-panel">
+        <select id="product-select" class="custom-select">
+            <option value="1">Sản phẩm 1</option>
+            <option value="2">Sản phẩm 2</option>
+            <option value="3">Sản phẩm 3</option>
+            <option value="4">Sản phẩm 4</option>
+        </select>
+
+        <select id="view-select" class="custom-select">
+            <option value="truoc_nb">Mặt Trước</option>
+            <option value="sau_nb">Mặt Sau</option>
+            <option value="trai_nb">Mặt Trái</option>
+            <option value="phai_nb">Mặt Phải</option>
+        </select>
+    </div>
+
+    <div class="camera-wrapper">
+        <video id="camera-stream" autoplay playsinline></video>
+        <img id="ghost-image" src="1/truoc_nb.png" alt="Ảnh bóng mờ" />
+    </div>
+
+    <div class="controls">
+        <div class="instruction">
+            Chỉnh độ Đậm/Nhạt của bóng mờ rồi ngắm khớp viền.
+        </div>
+        <input type="range" id="opacity-slider" min="10" max="90" value="50">
+        <br>
+        <button id="capture-btn">📸 Bấm Chụp Test</button>
+    </div>
+
+    <canvas id="canvas-output"></canvas>
+
+    <script>
+        const video = document.getElementById('camera-stream');
+        const captureBtn = document.getElementById('capture-btn');
+        const canvas = document.getElementById('canvas-output');
+        const opacitySlider = document.getElementById('opacity-slider');
+        const ghostImage = document.getElementById('ghost-image');
+
+        const productSelect = document.getElementById('product-select');
+        const viewSelect = document.getElementById('view-select');
+
+        // LOGIC 1: Đổi ảnh tĩnh theo 2 tùy chọn đã fix cứng
+        function updateGhostImage() {
+            const folder = productSelect.value;
+            const filename = viewSelect.value;
+            // Gọi chính xác file có đuôi _nb.png
+            ghostImage.src = `${folder}/${filename}.png`;
+        }
+
+        productSelect.addEventListener('change', updateGhostImage);
+        viewSelect.addEventListener('change', updateGhostImage);
+
+        // Báo lỗi nếu thiếu file ảnh
+        ghostImage.addEventListener('error', () => {
+            alert(`Lỗi: Không tìm thấy ảnh "${ghostImage.getAttribute('src')}". Hãy đảm bảo bạn đã chép đúng file (ví dụ: truoc_nb.png) vào thư mục!`);
+            ghostImage.src = '';
+        });
+
+        // LOGIC 2: Trượt để chỉnh độ mờ
+        opacitySlider.addEventListener('input', (e) => {
+            ghostImage.style.opacity = e.target.value / 100;
+        });
+
+        // LOGIC 3: Khởi động Camera
+        async function startCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: 'environment' }
+                });
+                video.srcObject = stream;
+            } catch (err) {
+                alert("Không thể mở Camera. Lỗi: " + err.message);
+            }
+        }
+
+        // LOGIC 4: Cắt Canvas chuẩn tỷ lệ và xuất file
+        captureBtn.addEventListener('click', () => {
+            const wrapper = document.querySelector('.camera-wrapper');
+
+            const videoW = video.videoWidth;
+            const videoH = video.videoHeight;
+            const videoRatio = videoW / videoH;
+
+            const wrapperW = wrapper.clientWidth;
+            const wrapperH = wrapper.clientHeight;
+            const wrapperRatio = wrapperW / wrapperH;
+
+            let drawWidth, drawHeight, startX, startY;
+
+            if (wrapperRatio > videoRatio) {
+                drawWidth = videoW;
+                drawHeight = videoW / wrapperRatio;
+                startX = 0;
+                startY = (videoH - drawHeight) / 2;
+            } else {
+                drawHeight = videoH;
+                drawWidth = videoH * wrapperRatio;
+                startX = (videoW - drawWidth) / 2;
+                startY = 0;
+            }
+
+            canvas.width = drawWidth;
+            canvas.height = drawHeight;
+            const context = canvas.getContext('2d');
+
+            context.drawImage(
+                video,
+                startX, startY, drawWidth, drawHeight,
+                0, 0, drawWidth, drawHeight
+            );
+
+            // Tên file xuất ra ví dụ: khach_chup_1_truoc_nb.jpg
+            const fileName = `khach_chup_${productSelect.value}_${viewSelect.value}.jpg`;
+
+            const dataURL = canvas.toDataURL('image/jpeg', 1.0);
+            const a = document.createElement('a');
+            a.href = dataURL;
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+
+            alert(`Đã chụp thành công: ${fileName}`);
+        });
+
+        window.addEventListener('load', startCamera);
+    </script>
+</body>
+
+</html>

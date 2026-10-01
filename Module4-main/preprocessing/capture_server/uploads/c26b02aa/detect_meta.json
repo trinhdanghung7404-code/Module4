@@ -1,0 +1,86 @@
+{
+  "truoc": {
+    "status": "ok",
+    "triangles": 477,
+    "l1_defects": 54,
+    "l2_defects": 0,
+    "total_defects": 54,
+    "mesh_url": "/uploads/c26b02aa/detect_truoc/02_mesh/mesh_return.jpg",
+    "l1_overlay_url": "/uploads/c26b02aa/detect_truoc/03_layer1_structure/06_structure_damage_overlay.jpg",
+    "l1_canny_url": "/uploads/c26b02aa/detect_truoc/03_layer1_structure/04_return_canny_denoised.jpg",
+    "l2_heatmap_url": "/uploads/c26b02aa/detect_truoc/04_layer2_color/01_chroma_delta_e_heatmap.jpg",
+    "l2_overlay_url": "/uploads/c26b02aa/detect_truoc/04_layer2_color/02_color_damage_overlay.jpg",
+    "side_by_side_url": "/uploads/c26b02aa/detect_truoc/05_fusion/03_side_by_side_marked.jpg",
+    "crop_urls": [
+      "/uploads/c26b02aa/detect_truoc/06_defect_crops/defect_tri_007_Nut_GayNet_L1.jpg",
+      "/uploads/c26b02aa/detect_truoc/06_defect_crops/defect_tri_018_Nut_GayNet_L1.jpg",
+      "/uploads/c26b02aa/detect_truoc/06_defect_crops/defect_tri_022_Nut_GayNet_L1.jpg",
+      "/uploads/c26b02aa/detect_truoc/06_defect_crops/defect_tri_033_Nut_GayNet_L1.jpg",
+      "/uploads/c26b02aa/detect_truoc/06_defect_crops/defect_tri_053_Nut_GayNet_L1.jpg",
+      "/uploads/c26b02aa/detect_truoc/06_defect_crops/defect_tri_058_Nut_GayNet_L1.jpg"
+    ]
+  },
+  "sau": {
+    "status": "ok",
+    "triangles": 418,
+    "l1_defects": 54,
+    "l2_defects": 0,
+    "total_defects": 54,
+    "mesh_url": "/uploads/c26b02aa/detect_sau/02_mesh/mesh_return.jpg",
+    "l1_overlay_url": "/uploads/c26b02aa/detect_sau/03_layer1_structure/06_structure_damage_overlay.jpg",
+    "l1_canny_url": "/uploads/c26b02aa/detect_sau/03_layer1_structure/04_return_canny_denoised.jpg",
+    "l2_heatmap_url": "/uploads/c26b02aa/detect_sau/04_layer2_color/01_chroma_delta_e_heatmap.jpg",
+    "l2_overlay_url": "/uploads/c26b02aa/detect_sau/04_layer2_color/02_color_damage_overlay.jpg",
+    "side_by_side_url": "/uploads/c26b02aa/detect_sau/05_fusion/03_side_by_side_marked.jpg",
+    "crop_urls": [
+      "/uploads/c26b02aa/detect_sau/06_defect_crops/defect_tri_011_Nut_GayNet_L1.jpg",
+      "/uploads/c26b02aa/detect_sau/06_defect_crops/defect_tri_039_Nut_GayNet_L1.jpg",
+      "/uploads/c26b02aa/detect_sau/06_defect_crops/defect_tri_058_Nut_GayNet_L1.jpg",
+      "/uploads/c26b02aa/detect_sau/06_defect_crops/defect_tri_078_Nut_GayNet_L1.jpg",
+      "/uploads/c26b02aa/detect_sau/06_defect_crops/defect_tri_084_Nut_GayNet_L1.jpg",
+      "/uploads/c26b02aa/detect_sau/06_defect_crops/defect_tri_103_Nut_GayNet_L1.jpg"
+    ]
+  },
+  "trai": {
+    "status": "ok",
+    "triangles": 451,
+    "l1_defects": 56,
+    "l2_defects": 0,
+    "total_defects": 56,
+    "mesh_url": "/uploads/c26b02aa/detect_trai/02_mesh/mesh_return.jpg",
+    "l1_overlay_url": "/uploads/c26b02aa/detect_trai/03_layer1_structure/06_structure_damage_overlay.jpg",
+    "l1_canny_url": "/uploads/c26b02aa/detect_trai/03_layer1_structure/04_return_canny_denoised.jpg",
+    "l2_heatmap_url": "/uploads/c26b02aa/detect_trai/04_layer2_color/01_chroma_delta_e_heatmap.jpg",
+    "l2_overlay_url": "/uploads/c26b02aa/detect_trai/04_layer2_color/02_color_damage_overlay.jpg",
+    "side_by_side_url": "/uploads/c26b02aa/detect_trai/05_fusion/03_side_by_side_marked.jpg",
+    "crop_urls": [
+      "/uploads/c26b02aa/detect_trai/06_defect_crops/defect_tri_025_Nut_GayNet_L1.jpg",
+      "/uploads/c26b02aa/detect_trai/06_defect_crops/defect_tri_032_Nut_GayNet_L1.jpg",
+      "/uploads/c26b02aa/detect_trai/06_defect_crops/defect_tri_037_Nut_GayNet_L1.jpg",
+      "/uploads/c26b02aa/detect_trai/06_defect_crops/defect_tri_038_Nut_GayNet_L1.jpg",
+      "/uploads/c26b02aa/detect_trai/06_defect_crops/defect_tri_050_Nut_GayNet_L1.jpg",
+      "/uploads/c26b02aa/detect_trai/06_defect_crops/defect_tri_054_Nut_GayNet_L1.jpg"
+    ]
+  },
+  "phai": {
+    "status": "ok",
+    "triangles": 429,
+    "l1_defects": 48,
+    "l2_defects": 0,
+    "total_defects": 48,
+    "mesh_url": "/uploads/c26b02aa/detect_phai/02_mesh/mesh_return.jpg",
+    "l1_overlay_url": "/uploads/c26b02aa/detect_phai/03_layer1_structure/06_structure_damage_overlay.jpg",
+    "l1_canny_url": "/uploads/c26b02aa/detect_phai/03_layer1_structure/04_return_canny_denoised.jpg",
+    "l2_heatmap_url": "/uploads/c26b02aa/detect_phai/04_layer2_color/01_chroma_delta_e_heatmap.jpg",
+    "l2_overlay_url": "/uploads/c26b02aa/detect_phai/04_layer2_color/02_color_damage_overlay.jpg",
+    "side_by_side_url": "/uploads/c26b02aa/detect_phai/05_fusion/03_side_by_side_marked.jpg",
+    "crop_urls": [
+      "/uploads/c26b02aa/detect_phai/06_defect_crops/defect_tri_027_Nut_GayNet_L1.jpg",
+      "/uploads/c26b02aa/detect_phai/06_defect_crops/defect_tri_028_Nut_GayNet_L1.jpg",
+      "/uploads/c26b02aa/detect_phai/06_defect_crops/defect_tri_031_Nut_GayNet_L1.jpg",
+      "/uploads/c26b02aa/detect_phai/06_defect_crops/defect_tri_058_Nut_GayNet_L1.jpg",
+      "/uploads/c26b02aa/detect_phai/06_defect_crops/defect_tri_093_Nut_GayNet_L1.jpg",
+      "/uploads/c26b02aa/detect_phai/06_defect_crops/defect_tri_098_Nut_GayNet_L1.jpg"
+    ]
+  }
+}

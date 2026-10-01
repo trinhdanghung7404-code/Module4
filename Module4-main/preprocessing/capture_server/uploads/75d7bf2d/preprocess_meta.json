@@ -1,0 +1,46 @@
+{
+  "truoc": {
+    "status": "ok",
+    "ignore_ratio": 0.05,
+    "should_reshoot": false,
+    "processed_url": "/uploads/75d7bf2d/khach_truoc_processed.png",
+    "specular_mask_url": "/uploads/75d7bf2d/khach_truoc_specular_mask.png",
+    "saturated_mask_url": "/uploads/75d7bf2d/khach_truoc_saturated_mask.png",
+    "ignore_mask_url": "/uploads/75d7bf2d/khach_truoc_ignore_mask.png",
+    "overlay_contour_url": "/uploads/75d7bf2d/khach_truoc_overlay_contour.png",
+    "goc_processed_url": "/uploads/75d7bf2d/goc_truoc_processed.png"
+  },
+  "sau": {
+    "status": "ok",
+    "ignore_ratio": 0.4,
+    "should_reshoot": false,
+    "processed_url": "/uploads/75d7bf2d/khach_sau_processed.png",
+    "specular_mask_url": "/uploads/75d7bf2d/khach_sau_specular_mask.png",
+    "saturated_mask_url": "/uploads/75d7bf2d/khach_sau_saturated_mask.png",
+    "ignore_mask_url": "/uploads/75d7bf2d/khach_sau_ignore_mask.png",
+    "overlay_contour_url": "/uploads/75d7bf2d/khach_sau_overlay_contour.png",
+    "goc_processed_url": "/uploads/75d7bf2d/goc_sau_processed.png"
+  },
+  "trai": {
+    "status": "ok",
+    "ignore_ratio": 0.39,
+    "should_reshoot": false,
+    "processed_url": "/uploads/75d7bf2d/khach_trai_processed.png",
+    "specular_mask_url": "/uploads/75d7bf2d/khach_trai_specular_mask.png",
+    "saturated_mask_url": "/uploads/75d7bf2d/khach_trai_saturated_mask.png",
+    "ignore_mask_url": "/uploads/75d7bf2d/khach_trai_ignore_mask.png",
+    "overlay_contour_url": "/uploads/75d7bf2d/khach_trai_overlay_contour.png",
+    "goc_processed_url": "/uploads/75d7bf2d/goc_trai_processed.png"
+  },
+  "phai": {
+    "status": "ok",
+    "ignore_ratio": 0.39,
+    "should_reshoot": false,
+    "processed_url": "/uploads/75d7bf2d/khach_phai_processed.png",
+    "specular_mask_url": "/uploads/75d7bf2d/khach_phai_specular_mask.png",
+    "saturated_mask_url": "/uploads/75d7bf2d/khach_phai_saturated_mask.png",
+    "ignore_mask_url": "/uploads/75d7bf2d/khach_phai_ignore_mask.png",
+    "overlay_contour_url": "/uploads/75d7bf2d/khach_phai_overlay_contour.png",
+    "goc_processed_url": "/uploads/75d7bf2d/goc_phai_processed.png"
+  }
+}

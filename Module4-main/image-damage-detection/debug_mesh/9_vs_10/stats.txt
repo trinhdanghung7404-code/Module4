@@ -1,0 +1,10 @@
+=== Adaptive Mesh Refinement Statistics ===
+
+Original Triangles   : 909
+Refined Triangles    : 936
+Triangles Processed  : 9
+Triangles Skipped    : 0
+Total Refinements    : 9
+Average Similarity   : 0.8629
+Similarity Time      : 22.1557s
+Mesh Time            : 1.0106s
