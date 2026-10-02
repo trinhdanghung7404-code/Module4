@@ -1,0 +1,186 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==========================================
+// 1. NGƯỜI DÙNG & TÀI KHOẢN
+// ==========================================
+enum Role {
+  CUSTOMER // Đã đổi từ USER thành CUSTOMER theo chuẩn Use Case
+  ADMIN
+  STAFF
+}
+
+model User {
+  id            String         @id @default(uuid())
+  email         String         @unique
+  password      String
+  name          String
+  role          Role           @default(CUSTOMER)
+  avatar        String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  refreshTokens RefreshToken[]
+  addresses     UserAddress[]
+  orders        Order[]
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+model UserAddress {
+  id            String   @id @default(uuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  receiverName  String
+  receiverPhone String
+  addressDetail String
+  isDefault     Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+// ==========================================
+// 2. SẢN PHẨM & DANH MỤC
+// ==========================================
+model Category {
+  id          String    @id @default(uuid())
+  name        String    @unique
+  description String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  products    Product[]
+}
+
+model Product {
+  id          String    @id @default(uuid())
+  categoryId  String
+  category    Category  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  isActive    Boolean   @default(true) // true = Đang bán, false = Ẩn
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  variants     ProductVariant[]
+  orderDetails OrderDetail[]
+}
+
+model ProductVariant {
+  id            String    @id @default(uuid())
+  productId     String
+  product       Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variantName   String    // VD: "Men rạn - Size L" hoặc "Mặc định"
+  price         Int
+  stockQuantity Int       @default(0)
+
+  images       VariantImage[]
+  orderDetails OrderDetail[]
+}
+
+model VariantImage {
+  id           String         @id @default(uuid())
+  variantId    String
+  variant      ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  imageUrl     String
+  isPrimary    Boolean        @default(false)
+  displayOrder Int            @default(0)
+}
+
+// ==========================================
+// 3. ĐƠN HÀNG (ORDER & PAYMENT)
+// ==========================================
+enum DeliveryType {
+  PICKUP
+  SHIPPING
+}
+
+enum PaymentMethod {
+  COD
+  PAYOS
+}
+
+enum PaymentStatus {
+  UNPAID
+  PAID
+}
+
+enum OrderStatus {
+  PENDING
+  PROCESSING
+  SHIPPING
+  READY_FOR_PICKUP
+  COMPLETED
+  CANCELED
+}
+
+enum ShippingProvider {
+  GHTK
+  VTP
+  VNPOST
+  AHAMOVE
+}
+
+model Order {
+  id               String            @id @default(uuid())
+  orderCode        String            @unique
+  customerId       String
+  customer         User              @relation(fields: [customerId], references: [id])
+  
+  // Snapshot thông tin nhận hàng
+  receiverName     String
+  receiverPhone    String
+  deliveryType     DeliveryType
+  deliveryAddress  String?           // Null nếu là PICKUP
+  
+  // Thông tin tiền tệ
+  shippingFee      Int               @default(0)
+  totalAmount      Int
+  
+  // Thanh toán & Trạng thái
+  paymentMethod    PaymentMethod
+  paymentStatus    PaymentStatus     @default(UNPAID)
+  orderStatus      OrderStatus       @default(PENDING)
+  
+  // Vận chuyển (Nhân viên thao tác)
+  shippingProvider ShippingProvider? // Null nếu là PICKUP
+  trackingCode     String?           // Mã bill nhân viên nhập tay
+  cancelReason     String?
+  
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  orderDetails     OrderDetail[]
+}
+
+model OrderDetail {
+  id             String         @id @default(uuid())
+  orderId        String
+  order          Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  
+  // Liên kết về bảng Sản phẩm (Khóa lại, không cho phép xóa vĩnh viễn sản phẩm/phân loại nếu đã có đơn)
+  productId      String
+  product        Product        @relation(fields: [productId], references: [id], onDelete: Restrict)
+  variantId      String
+  variant        ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  
+  // Dữ liệu Snapshot (Lưu cứng lúc mua để chống thay đổi từ master data)
+  productName    String
+  classification String?
+  unitPrice      Int
+  quantity       Int
+  subTotal       Int
+}
