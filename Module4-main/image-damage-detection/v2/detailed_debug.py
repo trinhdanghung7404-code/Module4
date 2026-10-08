@@ -289,19 +289,17 @@ def run_detailed_debug(product_path: str, return_path: str, base_debug_dir: str 
     mesh_builder = MeshBuilder()
     vertices, triangles = mesh_builder.build(inliers_p, inliers_r, np.arange(len(inliers_p)))
 
-    # Xây dựng đồ thị kề cạnh (1-ring Adjacency Map)
-    edge_to_triangles = defaultdict(list)
+    # Xây dựng đồ thị kề cận Topo (Topological 1-Ring Star: chia sẻ cạnh HOẶC chia sẻ đỉnh)
+    vertex_to_triangles = defaultdict(list)
     for i, tri in enumerate(triangles):
-        v = list(tri.vertex_indices)
-        for e in [frozenset([v[0], v[1]]), frozenset([v[1], v[2]]), frozenset([v[2], v[0]])]:
-            edge_to_triangles[e].append(i)
+        for v in tri.vertex_indices:
+            vertex_to_triangles[v].append(i)
 
     triangle_neighbors = {}
     for i, tri in enumerate(triangles):
-        v = list(tri.vertex_indices)
         nbrs = set()
-        for e in [frozenset([v[0], v[1]]), frozenset([v[1], v[2]]), frozenset([v[2], v[0]])]:
-            for other_idx in edge_to_triangles[e]:
+        for v in tri.vertex_indices:
+            for other_idx in vertex_to_triangles[v]:
                 if other_idx != i:
                     nbrs.add(other_idx)
         triangle_neighbors[i] = list(nbrs)
@@ -490,6 +488,13 @@ def run_detailed_debug(product_path: str, return_path: str, base_debug_dir: str 
         p_l_valid = p_l_eval[non_glare]
         p_tri_base = float(np.median(p_l_valid)) if len(p_l_valid) > 0 else 200.0
 
+        p_dark_cnt = int(np.sum((p_raw_gray < 60) & non_glare))
+        r_dark_cnt = int(np.sum((r_raw_gray < 60) & non_glare))
+        p_dark_dil = cv2.dilate((p_raw_gray < 60).astype(np.uint8), np.ones((5, 5), np.uint8))
+        is_existing_dark_stroke = bool(
+            p_dark_cnt >= 120 and (r_dark_cnt / (p_dark_cnt + 1e-5) < 1.35)
+        )
+
         max_solid_lum_blob = 0
         max_lum_solidity = 0.0
         is_intrusive_lum_blob = False
@@ -532,6 +537,7 @@ def run_detailed_debug(product_path: str, return_path: str, base_debug_dir: str 
                     # Dense pattern rules: Large foreign blob overlay
                     req_area_pattern = max(150, min(300, int(3.5 * np.sqrt(tri_valid_area))))
                     cond_stain = bool(
+                        not is_existing_dark_stroke and
                         area >= req_area_pattern and solidity >= 0.70 and
                         drop_b >= 10.0 and contrast_energy >= 1500.0
                     )
@@ -559,6 +565,10 @@ def run_detailed_debug(product_path: str, return_path: str, base_debug_dir: str 
 
         is_ink_stain = False
         max_ink_blob = 0
+        p_dark_cnt = int(np.sum((p_raw_gray < 60) & non_glare))
+        r_dark_cnt = int(np.sum((r_raw_gray < 60) & non_glare))
+        p_dark_dil = cv2.dilate((p_raw_gray < 60).astype(np.uint8), np.ones((5, 5), np.uint8))
+
         for l in range(1, num_lbl_ink):
             area = stats_ink[l, cv2.CC_STAT_AREA]
             if area >= 35:
@@ -566,13 +576,23 @@ def run_detailed_debug(product_path: str, return_path: str, base_debug_dir: str 
                 if np.std(r_raw_gray[m_ink]) <= 22.0:
                     dist_ink = cv2.distanceTransform(m_ink.astype(np.uint8) * 255, cv2.DIST_L2, 3)
                     core_radius = float(np.max(dist_ink))
-                    if p_edge_cnt >= 20:
-                        is_solid_droplet = bool((core_radius >= 2.8 and area >= 45) or (core_radius >= 3.5))
-                    else:
-                        is_solid_droplet = bool(core_radius >= 1.8 and area >= 35)
-                    if is_solid_droplet:
-                        max_ink_blob = max(max_ink_blob, area)
-                        is_ink_stain = True
+
+                    # Kiểm tra xem đây có phải là nét đen cũ có sẵn trên Product bị trượt vi nắn hay không
+                    overlap_existing = float(np.sum(m_ink & (p_dark_dil > 0))) / (float(area) + 1e-5)
+                    is_stroke_jitter = bool(
+                        overlap_existing >= 0.40 and 
+                        p_dark_cnt >= 120 and 
+                        (r_dark_cnt / (p_dark_cnt + 1e-5) < 1.35)
+                    )
+
+                    if not is_stroke_jitter:
+                        if p_edge_cnt >= 20:
+                            is_solid_droplet = bool((core_radius >= 2.8 and area >= 45) or (core_radius >= 3.5))
+                        else:
+                            is_solid_droplet = bool(core_radius >= 1.8 and area >= 35)
+                        if is_solid_droplet:
+                            max_ink_blob = max(max_ink_blob, area)
+                            is_ink_stain = True
 
         # Color distribution analysis
         dist_info = compute_triangle_color_distribution(p_c_lab, r_c_lab, non_glare)
@@ -768,12 +788,17 @@ def run_detailed_debug(product_path: str, return_path: str, base_debug_dir: str 
         is_both = bool(item["is_lum_damage"] and item["is_ab_method_damage"])
         is_flagged = bool(i in flagged_pool)
 
-        # Lỗi vật lý nặng rõ rệt (vết mực đen sâu / nứt vỡ thật sự có diện tích >= 45px và không phải nét cũ)
-        is_severe_defect = bool(
+        # Lỗi vật lý nặng rõ rệt (vết mực đen sâu / nứt vỡ thật sự HOẶC khối tổn thương màu lớn liên tục >= 350px)
+        is_severe_ink = bool(
             item.get("is_ink_stain", False) and 
             not (item.get("dino_sim", 0) >= 0.915 and item.get("max_chroma_blob", 0) < 20) and
             item.get("ink_area", 0) >= 45
         )
+        is_severe_chroma = bool(
+            item.get("max_chroma_blob", 0) >= 350 and 
+            item.get("w_chroma", 0.0) >= 14.0
+        )
+        is_severe_defect = bool(is_severe_ink or is_severe_chroma)
 
         if not is_flagged:
             item["defect_tier"] = 0
