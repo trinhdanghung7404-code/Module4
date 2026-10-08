@@ -289,17 +289,29 @@ def run_detailed_debug(product_path: str, return_path: str, base_debug_dir: str 
     mesh_builder = MeshBuilder()
     vertices, triangles = mesh_builder.build(inliers_p, inliers_r, np.arange(len(inliers_p)))
 
-    # Xây dựng đồ thị kề cận Topo (Topological 1-Ring Star: chia sẻ cạnh HOẶC chia sẻ đỉnh)
-    vertex_to_triangles = defaultdict(list)
+    # Xây dựng đồ thị kề cạnh (Edge-Sharing Adjacency: 2 tam giác phải chung 1 cạnh thực sự, tức 2 đỉnh chung)
+    edge_to_triangles = defaultdict(list)
     for i, tri in enumerate(triangles):
-        for v in tri.vertex_indices:
-            vertex_to_triangles[v].append(i)
+        v = list(tri.vertex_indices)
+        edges = [
+            tuple(sorted((v[0], v[1]))),
+            tuple(sorted((v[1], v[2]))),
+            tuple(sorted((v[2], v[0])))
+        ]
+        for e in edges:
+            edge_to_triangles[e].append(i)
 
     triangle_neighbors = {}
     for i, tri in enumerate(triangles):
+        v = list(tri.vertex_indices)
+        edges = [
+            tuple(sorted((v[0], v[1]))),
+            tuple(sorted((v[1], v[2]))),
+            tuple(sorted((v[2], v[0])))
+        ]
         nbrs = set()
-        for v in tri.vertex_indices:
-            for other_idx in vertex_to_triangles[v]:
+        for e in edges:
+            for other_idx in edge_to_triangles[e]:
                 if other_idx != i:
                     nbrs.add(other_idx)
         triangle_neighbors[i] = list(nbrs)
