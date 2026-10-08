@@ -580,9 +580,9 @@ def run_detailed_debug(product_path: str, return_path: str, base_debug_dir: str 
                     # Kiểm tra xem đây có phải là nét đen cũ có sẵn trên Product bị trượt vi nắn hay không
                     overlap_existing = float(np.sum(m_ink & (p_dark_dil > 0))) / (float(area) + 1e-5)
                     is_stroke_jitter = bool(
-                        overlap_existing >= 0.40 and 
-                        p_dark_cnt >= 120 and 
-                        (r_dark_cnt / (p_dark_cnt + 1e-5) < 1.35)
+                        overlap_existing >= 0.35 and 
+                        p_dark_cnt >= 35 and 
+                        (r_dark_cnt / (p_dark_cnt + 1e-5) < 1.45)
                     )
 
                     if not is_stroke_jitter:
@@ -653,6 +653,8 @@ def run_detailed_debug(product_path: str, return_path: str, base_debug_dir: str 
             "patch_fused_l2": patch_fused_l2,
             "is_ink_stain": is_ink_stain,
             "ink_area": max_ink_blob,
+            "p_dark_cnt": p_dark_cnt,
+            "r_dark_cnt": r_dark_cnt,
         })
 
     # Statistical distribution across triangles for adaptive thresholds
@@ -734,13 +736,20 @@ def run_detailed_debug(product_path: str, return_path: str, base_debug_dir: str 
         # Kênh L (Luminance & Độ sáng men) + DINOv2 Gatekeeper
         intrusive_verified = bool(item.get("is_intrusive_lum_blob", False) and not is_dino_consistent)
 
-        # Phân biệt Vết mực đen ngoại lai thật sự (Tri #629, #131) vs Nét vẽ đen cũ có sẵn bị trượt vi nắn (Tri #39):
-        # Nếu DINOv2 rất cao (>= 0.900) và Kênh ab hoàn toàn sạch (max_chroma_blob < 20 và w_chroma < 10):
+        # Phân biệt Vết mực đen ngoại lai thật sự (Tri #629, #131) vs Nét vẽ đen cũ có sẵn bị trượt vi nắn (Tri #39, #397):
+        # Nếu DINOv2 rất cao (>= 0.900) và Kênh ab không nhận diện lỗi:
+        # Nếu trên Product vốn đã có nét đen (p_dark_cnt >= 30) với tỷ lệ dark không tăng đột biến (r_dark / p_dark < 1.45),
+        # hoặc nếu Kênh ab hoàn toàn sạch (max_chroma_blob < 20 và w_chroma < 10):
         # chứng minh nét đen đó đã có sẵn trên Product và bề mặt đồng nhất -> Bác bỏ báo ảo!
+        is_stroke_ratio_ok = bool(
+            item.get("p_dark_cnt", 0) >= 30 and 
+            (item.get("r_dark_cnt", 0) / (item.get("p_dark_cnt", 0) + 1e-5) < 1.45)
+        )
         is_existing_stroke_shift = bool(
-            is_dino_consistent and 
-            item.get("max_chroma_blob", 0) < 20 and 
-            item.get("w_chroma", 0.0) < 10.0
+            is_dino_consistent and (
+                (item.get("max_chroma_blob", 0) < 20 and item.get("w_chroma", 0.0) < 10.0) or
+                (not is_ab_method_damage and is_stroke_ratio_ok)
+            )
         )
         real_ink_stain = bool(item.get("is_ink_stain", False) and not is_existing_stroke_shift)
 
@@ -808,8 +817,8 @@ def run_detailed_debug(product_path: str, return_path: str, base_debug_dir: str 
             item["tier_color"] = (0, 255, 0)
             item["is_final_defect"] = False
             item["is_isolated"] = False
-        elif is_both or is_severe_defect:
-            # CẤP 1: Chắc chắn lỗi (Cả 2 kênh cùng nhận HOẶC Vết nứt/mực đen sâu rõ rệt)
+        elif is_both:
+            # CẤP 1: Chắc chắn lỗi (BẮT BUỘC CẢ 2 KÊNH L VÀ ab CÙNG NHẬN DIỆN)
             item["defect_tier"] = 1
             item["tier_label"] = "CHAC CHAN LOI"
             item["tier_color"] = (0, 0, 255)  # Đỏ đậm
@@ -817,7 +826,7 @@ def run_detailed_debug(product_path: str, return_path: str, base_debug_dir: str 
             item["is_isolated"] = False
             tier1_confirmed.append(i)
         else:
-            # Chỉ 1 kênh nhận và là lỗi vừa/nhẹ: Kiểm tra các tam giác kề cạnh
+            # Chỉ 1 kênh nhận: Kiểm tra các tam giác kề cạnh
             nbrs = triangle_neighbors.get(i, [])
             has_adjacent_flagged = any(nbr in flagged_pool for nbr in nbrs)
             if has_adjacent_flagged:
