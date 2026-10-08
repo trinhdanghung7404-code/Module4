@@ -244,6 +244,8 @@ def run_detailed_debug(product_path: str, return_path: str, base_debug_dir: str 
         raise FileNotFoundError(f"Could not load images: {product_path} or {return_path}")
 
     h, w = product_img.shape[:2]
+    if return_img.shape[:2] != (h, w):
+        return_img = cv2.resize(return_img, (w, h), interpolation=cv2.INTER_LINEAR)
 
     # 2. Segment & Normalization
     segmenter = ObjectSegmenter()
