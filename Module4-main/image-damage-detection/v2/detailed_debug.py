@@ -683,13 +683,27 @@ def run_detailed_debug(product_path: str, return_path: str, base_debug_dir: str 
             item["w_chroma"] < 6.0 and
             item["new_color_ratio"] < 0.10
         )
-        is_ab_method_damage = bool(
-            (is_stain_intrusion or is_pattern_loss or is_chroma_damage or is_w_chroma_damage) and
+
+        # 1.5. Vết đen / Vết nứt / Dị vật dập tắt sắc tố màu (Dark Crack & Achromatic Void):
+        # Vết mực đen hoặc vết nứt tối sâu đè lên hoa văn màu:
+        is_dark_chroma_void = bool(item.get("is_ink_stain", False))
+
+        is_ab_raw = bool(
+            (is_stain_intrusion or is_pattern_loss or is_chroma_damage or is_w_chroma_damage or is_dark_chroma_void) and
             not is_color_shift_only
         )
 
-        # Kênh L (Luminance & Độ sáng men) + DINOv2 Gatekeeper
+        # DINOv2 GATEKEEPER CHO KÊNH ab:
+        # Nếu DINOv2 xác nhận hoa văn/chất liệu cực kỳ đồng nhất (dino_sim >= 0.915)
+        # và không có vết đen ink/nứt vỡ, không có đốm màu khổng lồ (blob < 300px):
+        # -> Triệt tiêu báo ảo do trượt gradient màu cánh hoa/lông chim!
         is_high_sim_clean = bool(item["dino_sim"] >= 0.915)
+        if is_high_sim_clean and not is_dark_chroma_void and item["max_chroma_blob"] < 300:
+            is_ab_method_damage = False
+        else:
+            is_ab_method_damage = is_ab_raw
+
+        # Kênh L (Luminance & Độ sáng men) + DINOv2 Gatekeeper
         intrusive_verified = bool(item.get("is_intrusive_lum_blob", False) and not is_high_sim_clean)
 
         is_pattern_region = bool(item.get("p_edge_cnt", 0) >= 20)
@@ -716,6 +730,7 @@ def run_detailed_debug(product_path: str, return_path: str, base_debug_dir: str 
         item["is_stain_intrusion"] = is_stain_intrusion
         item["is_chroma_damage"] = is_chroma_damage
         item["is_w_chroma_damage"] = is_w_chroma_damage
+        item["is_dark_chroma_void"] = is_dark_chroma_void
         item["is_ab_method_damage"] = is_ab_method_damage
         item["is_lum_damage"] = is_lum_damage
         item["is_fused_damage"] = is_fused_damage
@@ -736,14 +751,17 @@ def run_detailed_debug(product_path: str, return_path: str, base_debug_dir: str 
         is_both = bool(item["is_lum_damage"] and item["is_ab_method_damage"])
         is_flagged = bool(i in flagged_pool)
 
+        # Lỗi vật lý nặng rõ rệt (vết mực đen sâu / nứt vỡ thật sự có diện tích >= 45px)
+        is_severe_defect = bool(item.get("is_ink_stain", False) and item.get("ink_area", 0) >= 45)
+
         if not is_flagged:
             item["defect_tier"] = 0
             item["tier_label"] = "BINH THUONG"
             item["tier_color"] = (0, 255, 0)
             item["is_final_defect"] = False
             item["is_isolated"] = False
-        elif is_both:
-            # CẤP 1: Chắc chắn lỗi (Cả 2 kênh cùng nhận)
+        elif is_both or is_severe_defect:
+            # CẤP 1: Chắc chắn lỗi (Cả 2 kênh cùng nhận HOẶC Vết nứt/mực đen sâu rõ rệt)
             item["defect_tier"] = 1
             item["tier_label"] = "CHAC CHAN LOI"
             item["tier_color"] = (0, 0, 255)  # Đỏ đậm
@@ -751,7 +769,7 @@ def run_detailed_debug(product_path: str, return_path: str, base_debug_dir: str 
             item["is_isolated"] = False
             tier1_confirmed.append(i)
         else:
-            # Chỉ 1 kênh nhận: Kiểm tra các tam giác kề cạnh
+            # Chỉ 1 kênh nhận và là lỗi vừa/nhẹ: Kiểm tra các tam giác kề cạnh
             nbrs = triangle_neighbors.get(i, [])
             has_adjacent_flagged = any(nbr in flagged_pool for nbr in nbrs)
             if has_adjacent_flagged:
