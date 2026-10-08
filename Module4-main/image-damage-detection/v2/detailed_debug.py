@@ -748,37 +748,38 @@ def run_detailed_debug(product_path: str, return_path: str, base_debug_dir: str 
         # Kênh L (Luminance & Độ sáng men) + DINOv2 Gatekeeper
         intrusive_verified = bool(item.get("is_intrusive_lum_blob", False) and not is_dino_consistent)
 
-        # Phân biệt Vết mực đen ngoại lai thật sự (Tri #629, #131) vs Nét vẽ đen cũ có sẵn bị trượt vi nắn (Tri #39, #397):
-        # Nếu DINOv2 rất cao (>= 0.900) và Kênh ab không nhận diện lỗi:
-        # Nếu trên Product vốn đã có nét đen (p_dark_cnt >= 30) với tỷ lệ dark không tăng đột biến (r_dark / p_dark < 1.45),
-        # hoặc nếu Kênh ab hoàn toàn sạch (max_chroma_blob < 20 và w_chroma < 10):
-        # chứng minh nét đen đó đã có sẵn trên Product và bề mặt đồng nhất -> Bác bỏ báo ảo!
-        is_stroke_ratio_ok = bool(
-            item.get("p_dark_cnt", 0) >= 30 and 
-            (item.get("r_dark_cnt", 0) / (item.get("p_dark_cnt", 0) + 1e-5) < 1.45)
-        )
-        is_existing_stroke_shift = bool(
-            is_dino_consistent and (
-                (item.get("max_chroma_blob", 0) < 20 and item.get("w_chroma", 0.0) < 10.0) or
-                (not is_ab_method_damage and is_stroke_ratio_ok)
-            )
-        )
-        real_ink_stain = bool(item.get("is_ink_stain", False) and not is_existing_stroke_shift)
+        # Vết mực đen / nứt vỡ vật lý ngoại lai thật sự:
+        # is_ink_stain đã được kiểm định hình thái học cục bộ nghiêm ngặt (Local Morphological Component):
+        # - Khối sụt tối đen sâu (pitch drop > 40, r_raw_gray < 55, p_raw - r_raw >= 45)
+        # - Không trùng lặp với nét đen gốc của Product (overlap_existing < 0.35)
+        # - Có lõi đặc (core_radius >= 2.8, area >= 45px)
+        real_ink_stain = bool(item.get("is_ink_stain", False))
 
         is_pattern_region = bool(item.get("p_edge_cnt", 0) >= 20)
         is_lum_conserved_pattern = bool(is_pattern_region and item.get("w_l", 0.0) < 8.0 and item["dino_sim"] >= 0.88)
 
+        # 1. Tổn thương do vết mực / nứt vỡ vật lý cục bộ (Local physical crack/stain):
+        # Đã xác minh có khối đen đặc sâu mới xuất hiện (ink_area >= 45px), loại trừ nét vẽ cũ (real_ink_stain):
+        is_physical_dark_defect = bool(
+            real_ink_stain and 
+            item.get("ink_area", 0) >= 45 and 
+            item["lum_err"] >= 12.0
+        )
+
+        # 2. Tổn thương tán xạ / dị vật diện rộng (Diffuse / Intrusive luminance lesion):
         if is_pattern_region:
-            is_lum_damage = bool(
-                (real_ink_stain or intrusive_verified) and
+            is_diffuse_lum_defect = bool(
+                intrusive_verified and
                 (item["lum_err"] >= 18.0) and
                 not is_lum_conserved_pattern
             )
         else:
-            is_lum_damage = bool(
-                (real_ink_stain or intrusive_verified) and
+            is_diffuse_lum_defect = bool(
+                intrusive_verified and
                 (item["lum_err"] >= 18.0)
             )
+
+        is_lum_damage = bool(is_physical_dark_defect or is_diffuse_lum_defect)
 
         is_fused_damage = bool(z_f > 2.8 and item["fused_l2_err"] >= 25.0 and item["max_fused_blob"] >= 35)
 
