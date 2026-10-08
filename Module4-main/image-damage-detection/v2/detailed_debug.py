@@ -287,6 +287,23 @@ def run_detailed_debug(product_path: str, return_path: str, base_debug_dir: str 
     mesh_builder = MeshBuilder()
     vertices, triangles = mesh_builder.build(inliers_p, inliers_r, np.arange(len(inliers_p)))
 
+    # Xây dựng đồ thị kề cạnh (1-ring Adjacency Map)
+    edge_to_triangles = defaultdict(list)
+    for i, tri in enumerate(triangles):
+        v = list(tri.vertex_indices)
+        for e in [frozenset([v[0], v[1]]), frozenset([v[1], v[2]]), frozenset([v[2], v[0]])]:
+            edge_to_triangles[e].append(i)
+
+    triangle_neighbors = {}
+    for i, tri in enumerate(triangles):
+        v = list(tri.vertex_indices)
+        nbrs = set()
+        for e in [frozenset([v[0], v[1]]), frozenset([v[1], v[2]]), frozenset([v[2], v[0]])]:
+            for other_idx in edge_to_triangles[e]:
+                if other_idx != i:
+                    nbrs.add(other_idx)
+        triangle_neighbors[i] = list(nbrs)
+
     # FOLDER 02: MESH WIREFRAME
     vis_mesh_p = product_img.copy()
     vis_mesh_r = return_img.copy()
@@ -626,9 +643,12 @@ def run_detailed_debug(product_path: str, return_path: str, base_debug_dir: str 
     wc_metrics = [p["w_chroma"] for p in patch_data]
     wc_mean, wc_std = float(np.mean(wc_metrics)), float(np.std(wc_metrics))
 
-    # Decision Making
-    triangle_details = []
-    layer2_flagged = []
+    # -------------------------------------------------------------------------
+    # STEP 4: 3-TIER FUSION DECISION ACROSS 2 CHANNELS (L & ab)
+    # -------------------------------------------------------------------------
+    # Bước 1: Đánh giá độc lập 2 kênh L và ab trên từng tam giác
+    preliminary_data = []
+    flagged_pool = set()
 
     for item in patch_data:
         i = item["id"]
@@ -636,9 +656,7 @@ def run_detailed_debug(product_path: str, return_path: str, base_debug_dir: str 
         z_f = (item["fused_l2_err"] - f_mean) / (f_std + 1e-8)
         z_wc = (item["w_chroma"] - wc_mean) / (wc_std + 1e-8)
 
-        # ---------------------------------------------------------------------
-        # PHƯƠNG PHÁP 1: KÊNH a, b (CHROMA & HOA VĂN MÀU)
-        # ---------------------------------------------------------------------
+        # Kênh ab (Chroma & Sắc tố màu)
         is_pattern_loss = bool(
             item["lost_pattern_ratio"] >= 0.35 and
             item["w_chroma"] >= 10.0 and
@@ -665,15 +683,12 @@ def run_detailed_debug(product_path: str, return_path: str, base_debug_dir: str 
             item["w_chroma"] < 6.0 and
             item["new_color_ratio"] < 0.10
         )
-
         is_ab_method_damage = bool(
             (is_stain_intrusion or is_pattern_loss or is_chroma_damage or is_w_chroma_damage) and
             not is_color_shift_only
         )
 
-        # ---------------------------------------------------------------------
-        # PHƯƠNG PHÁP 2: KÊNH L (LUMINANCE) + DINOv2 GATEKEEPER
-        # ---------------------------------------------------------------------
+        # Kênh L (Luminance & Độ sáng men) + DINOv2 Gatekeeper
         is_high_sim_clean = bool(item["dino_sim"] >= 0.915)
         intrusive_verified = bool(item.get("is_intrusive_lum_blob", False) and not is_high_sim_clean)
 
@@ -692,13 +707,7 @@ def run_detailed_debug(product_path: str, return_path: str, base_debug_dir: str 
                 (item["lum_err"] >= 18.0)
             )
 
-        # ---------------------------------------------------------------------
-        # FUSED L2 COMBINATION
-        # ---------------------------------------------------------------------
         is_fused_damage = bool(z_f > 2.8 and item["fused_l2_err"] >= 25.0 and item["max_fused_blob"] >= 35)
-
-        # Final Layer 2 Defect Decision
-        is_l2_damage = bool(is_lum_damage or is_ab_method_damage or is_fused_damage)
 
         item["z_c"] = z_c
         item["z_f"] = z_f
@@ -710,13 +719,64 @@ def run_detailed_debug(product_path: str, return_path: str, base_debug_dir: str 
         item["is_ab_method_damage"] = is_ab_method_damage
         item["is_lum_damage"] = is_lum_damage
         item["is_fused_damage"] = is_fused_damage
-        item["is_l1"] = False
-        item["is_l2"] = is_l2_damage
-        item["is_fused"] = is_l2_damage
 
+        if is_lum_damage or is_ab_method_damage or is_fused_damage:
+            flagged_pool.add(i)
+
+        preliminary_data.append(item)
+
+    # Bước 2: Phân loại phân tầng 3 cấp độ (3-Tier Classification)
+    triangle_details = []
+    tier1_confirmed = []   # Cấp 1: Chắc chắn lỗi (Đỏ)
+    tier2_probable = []    # Cấp 2: Khả năng lỗi (Cam - Cụm kề cạnh)
+    tier3_isolated = []    # Cấp 3: Nghi vấn riêng lẻ (Vàng - Đơn độc)
+
+    for item in preliminary_data:
+        i = item["id"]
+        is_both = bool(item["is_lum_damage"] and item["is_ab_method_damage"])
+        is_flagged = bool(i in flagged_pool)
+
+        if not is_flagged:
+            item["defect_tier"] = 0
+            item["tier_label"] = "BINH THUONG"
+            item["tier_color"] = (0, 255, 0)
+            item["is_final_defect"] = False
+            item["is_isolated"] = False
+        elif is_both:
+            # CẤP 1: Chắc chắn lỗi (Cả 2 kênh cùng nhận)
+            item["defect_tier"] = 1
+            item["tier_label"] = "CHAC CHAN LOI"
+            item["tier_color"] = (0, 0, 255)  # Đỏ đậm
+            item["is_final_defect"] = True
+            item["is_isolated"] = False
+            tier1_confirmed.append(i)
+        else:
+            # Chỉ 1 kênh nhận: Kiểm tra các tam giác kề cạnh
+            nbrs = triangle_neighbors.get(i, [])
+            has_adjacent_flagged = any(nbr in flagged_pool for nbr in nbrs)
+            if has_adjacent_flagged:
+                # CẤP 2: Khả năng lỗi (Cụm >= 2 tam giác kề cạnh)
+                item["defect_tier"] = 2
+                item["tier_label"] = "KHA NANG LOI"
+                item["tier_color"] = (0, 140, 255)  # Cam
+                item["is_final_defect"] = True
+                item["is_isolated"] = False
+                tier2_probable.append(i)
+            else:
+                # CẤP 3: Nghi vấn riêng lẻ (Đơn độc)
+                item["defect_tier"] = 3
+                item["tier_label"] = "NGHI VAN RIENG LE"
+                item["tier_color"] = (0, 255, 255)  # Vàng
+                item["is_final_defect"] = False
+                item["is_isolated"] = True
+                tier3_isolated.append(i)
+
+        item["is_l1"] = False
+        item["is_l2"] = item["is_final_defect"]
+        item["is_fused"] = item["is_final_defect"]
         triangle_details.append(item)
-        if is_l2_damage:
-            layer2_flagged.append(i)
+
+    confirmed_and_probable = tier1_confirmed + tier2_probable
 
     # -------------------------------------------------------------------------
     # CLEAN OLD CARDS BEFORE EXPORT
@@ -728,23 +788,34 @@ def run_detailed_debug(product_path: str, return_path: str, base_debug_dir: str 
             except OSError:
                 pass
 
-    # Save Layer 2 Overlay
+    # Save Layer 2 Overlay theo 3 màu cấp độ
     vis_l2_overlay = return_img.copy()
     overlay_l2 = return_img.copy()
     for t in triangle_details:
         pts = t["pts_r"].astype(np.int32).reshape((-1, 1, 2))
         cx = int(np.mean(t["pts_r"][:, 0]))
         cy = int(np.mean(t["pts_r"][:, 1]))
-        if t["is_l2"]:
+        tier = t["defect_tier"]
+        color = t["tier_color"]
+
+        if tier == 1:
             cv2.fillPoly(overlay_l2, [pts], (0, 0, 255))
             cv2.polylines(vis_l2_overlay, [pts], True, (0, 0, 255), 2, cv2.LINE_AA)
             draw_text_with_shadow(vis_l2_overlay, str(t["id"]), (cx - 10, cy + 4), font_scale=0.45, color=(0, 255, 255), thickness=1)
+        elif tier == 2:
+            cv2.fillPoly(overlay_l2, [pts], (0, 140, 255))
+            cv2.polylines(vis_l2_overlay, [pts], True, (0, 140, 255), 2, cv2.LINE_AA)
+            draw_text_with_shadow(vis_l2_overlay, str(t["id"]), (cx - 10, cy + 4), font_scale=0.45, color=(0, 255, 255), thickness=1)
+        elif tier == 3:
+            cv2.polylines(vis_l2_overlay, [pts], True, (0, 255, 255), 2, cv2.LINE_AA)
+            draw_text_with_shadow(vis_l2_overlay, str(t["id"]), (cx - 8, cy + 3), font_scale=0.38, color=(0, 255, 255), thickness=1)
         else:
             cv2.polylines(vis_l2_overlay, [pts], True, (0, 255, 0), 1, cv2.LINE_AA)
-            draw_text_with_shadow(vis_l2_overlay, str(t["id"]), (cx - 8, cy + 3), font_scale=0.32, color=(0, 255, 0), thickness=1)
+            draw_text_with_shadow(vis_l2_overlay, str(t["id"]), (cx - 8, cy + 3), font_scale=0.30, color=(0, 255, 0), thickness=1)
 
     vis_l2_overlay = cv2.addWeighted(overlay_l2, 0.4, vis_l2_overlay, 0.6, 0)
-    cv2.putText(vis_l2_overlay, f"Layer 2 (Color): {len(layer2_flagged)} damaged", (30, 60), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 0, 255) if layer2_flagged else (0, 255, 0), 3)
+    legend_banner = f"Chac chan (Do): {len(tier1_confirmed)} | Kha nang (Cam): {len(tier2_probable)} | Rieng le (Vang): {len(tier3_isolated)}"
+    cv2.putText(vis_l2_overlay, legend_banner, (30, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.85, (255, 255, 255), 2)
     cv2.imwrite(os.path.join(dir_l2, "02_color_damage_overlay.jpg"), vis_l2_overlay)
 
     # -------------------------------------------------------------------------
@@ -752,6 +823,8 @@ def run_detailed_debug(product_path: str, return_path: str, base_debug_dir: str 
     # -------------------------------------------------------------------------
     vis_final_p = product_img.copy()
     vis_final_r = return_img.copy()
+    overlay_final_p = product_img.copy()
+    overlay_final_r = return_img.copy()
 
     for t in triangle_details:
         pts_p = t["pts_p"].astype(np.int32).reshape((-1, 1, 2))
@@ -760,18 +833,36 @@ def run_detailed_debug(product_path: str, return_path: str, base_debug_dir: str 
         cy_p = int(np.mean(t["pts_p"][:, 1]))
         cx_r = int(np.mean(t["pts_r"][:, 0]))
         cy_r = int(np.mean(t["pts_r"][:, 1]))
-        if t["is_fused"]:
-            cv2.fillPoly(vis_final_p, [pts_p], (0, 0, 255))
-            cv2.polylines(vis_final_p, [pts_p], True, (0, 0, 255), 2)
-            cv2.fillPoly(vis_final_r, [pts_r], (0, 0, 255))
-            cv2.polylines(vis_final_r, [pts_r], True, (0, 0, 255), 2)
+        tier = t["defect_tier"]
+        color = t["tier_color"]
+
+        if tier == 1:
+            cv2.fillPoly(overlay_final_p, [pts_p], (0, 0, 255))
+            cv2.fillPoly(overlay_final_r, [pts_r], (0, 0, 255))
+            cv2.polylines(vis_final_p, [pts_p], True, (0, 0, 255), 2, cv2.LINE_AA)
+            cv2.polylines(vis_final_r, [pts_r], True, (0, 0, 255), 2, cv2.LINE_AA)
             draw_text_with_shadow(vis_final_p, str(t["id"]), (cx_p - 10, cy_p + 4), font_scale=0.45, color=(0, 255, 255), thickness=1)
             draw_text_with_shadow(vis_final_r, str(t["id"]), (cx_r - 10, cy_r + 4), font_scale=0.45, color=(0, 255, 255), thickness=1)
+        elif tier == 2:
+            cv2.fillPoly(overlay_final_p, [pts_p], (0, 140, 255))
+            cv2.fillPoly(overlay_final_r, [pts_r], (0, 140, 255))
+            cv2.polylines(vis_final_p, [pts_p], True, (0, 140, 255), 2, cv2.LINE_AA)
+            cv2.polylines(vis_final_r, [pts_r], True, (0, 140, 255), 2, cv2.LINE_AA)
+            draw_text_with_shadow(vis_final_p, str(t["id"]), (cx_p - 10, cy_p + 4), font_scale=0.45, color=(0, 255, 255), thickness=1)
+            draw_text_with_shadow(vis_final_r, str(t["id"]), (cx_r - 10, cy_r + 4), font_scale=0.45, color=(0, 255, 255), thickness=1)
+        elif tier == 3:
+            cv2.polylines(vis_final_p, [pts_p], True, (0, 255, 255), 2, cv2.LINE_AA)
+            cv2.polylines(vis_final_r, [pts_r], True, (0, 255, 255), 2, cv2.LINE_AA)
+            draw_text_with_shadow(vis_final_p, str(t["id"]), (cx_p - 8, cy_p + 3), font_scale=0.38, color=(0, 255, 255), thickness=1)
+            draw_text_with_shadow(vis_final_r, str(t["id"]), (cx_r - 8, cy_r + 3), font_scale=0.38, color=(0, 255, 255), thickness=1)
         else:
-            cv2.polylines(vis_final_p, [pts_p], True, (0, 255, 0), 1)
-            cv2.polylines(vis_final_r, [pts_r], True, (0, 255, 0), 1)
-            draw_text_with_shadow(vis_final_p, str(t["id"]), (cx_p - 8, cy_p + 3), font_scale=0.32, color=(0, 255, 0), thickness=1)
-            draw_text_with_shadow(vis_final_r, str(t["id"]), (cx_r - 8, cy_r + 3), font_scale=0.32, color=(0, 255, 0), thickness=1)
+            cv2.polylines(vis_final_p, [pts_p], True, (0, 255, 0), 1, cv2.LINE_AA)
+            cv2.polylines(vis_final_r, [pts_r], True, (0, 255, 0), 1, cv2.LINE_AA)
+            draw_text_with_shadow(vis_final_p, str(t["id"]), (cx_p - 8, cy_p + 3), font_scale=0.30, color=(0, 255, 0), thickness=1)
+            draw_text_with_shadow(vis_final_r, str(t["id"]), (cx_r - 8, cy_r + 3), font_scale=0.30, color=(0, 255, 0), thickness=1)
+
+    vis_final_p = cv2.addWeighted(overlay_final_p, 0.4, vis_final_p, 0.6, 0)
+    vis_final_r = cv2.addWeighted(overlay_final_r, 0.4, vis_final_r, 0.6, 0)
 
     cv2.imwrite(os.path.join(dir_fusion, "01_product_damage_marked.jpg"), vis_final_p)
     cv2.imwrite(os.path.join(dir_fusion, "02_return_damage_marked.jpg"), vis_final_r)
@@ -783,7 +874,8 @@ def run_detailed_debug(product_path: str, return_path: str, base_debug_dir: str 
     p_comp = cv2.resize(vis_final_p, (new_w, new_h))
     r_comp = cv2.resize(vis_final_r, (new_w, new_h))
     side_by_side = np.hstack([p_comp, r_comp])
-    cv2.putText(side_by_side, f"Defects Found: {len(layer2_flagged)} triangles", (40, 50), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 0, 255) if layer2_flagged else (0, 255, 0), 3)
+    legend_sbs = f"Chac chan (Do): {len(tier1_confirmed)} | Kha nang (Cam): {len(tier2_probable)} | Rieng le (Vang): {len(tier3_isolated)}"
+    cv2.putText(side_by_side, legend_sbs, (30, 45), cv2.FONT_HERSHEY_SIMPLEX, 0.85, (255, 255, 255), 2)
     cv2.imwrite(os.path.join(dir_fusion, "03_side_by_side_marked.jpg"), side_by_side)
 
     # -------------------------------------------------------------------------
@@ -809,7 +901,7 @@ def run_detailed_debug(product_path: str, return_path: str, base_debug_dir: str 
         # 1. KÊNH L (Luminance evidence card)
         is_l_defect = t.get("is_lum_damage", False)
         target_dir_l = dir_l2_l_diff if is_l_defect else dir_l2_l_match
-        poly_color_l = (0, 0, 255) if is_l_defect else (0, 255, 0)
+        poly_color_l = t["tier_color"] if is_l_defect else (0, 255, 0)
 
         cp_l = crop_p.copy()
         cr_l = crop_r.copy()
@@ -819,9 +911,8 @@ def run_detailed_debug(product_path: str, return_path: str, base_debug_dir: str 
         crr_l = cv2.resize(cr_l, (crop_w, crop_h)) if cr_l.size > 0 else np.zeros((crop_h, crop_w, 3), dtype=np.uint8)
 
         row_top_l = np.hstack([cpr_l, crr_l])
-        status_l = "LOI (DEFECT)" if is_l_defect else "BINH THUONG (NORMAL)"
         cv2.putText(row_top_l, "Product (Left) vs Return (Right) - KENH L", (10, 22), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 2)
-        cv2.putText(row_top_l, f"Tri #{t['id']}: [{status_l}] dino_sim={t.get('dino_sim', 0):.3f}", (10, 48), cv2.FONT_HERSHEY_SIMPLEX, 0.60, poly_color_l, 2)
+        cv2.putText(row_top_l, f"Tri #{t['id']}: [{t['tier_label']}] dino_sim={t.get('dino_sim', 0):.3f}", (10, 48), cv2.FONT_HERSHEY_SIMPLEX, 0.60, poly_color_l, 2)
         cv2.putText(row_top_l, f"dL={t.get('lum_err', 0.0):.1f}, SolidBlob={t.get('max_solid_lum_blob', 0)}px", (10, crop_h - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 255, 255), 1)
 
         mask_tri = t["mask"]
@@ -863,7 +954,7 @@ def run_detailed_debug(product_path: str, return_path: str, base_debug_dir: str 
         # 2. KÊNH ab (Chroma evidence card)
         is_ab_defect = t.get("is_ab_method_damage", False)
         target_dir_ab = dir_l2_ab_diff if is_ab_defect else dir_l2_ab_match
-        poly_color_ab = (0, 0, 255) if is_ab_defect else (0, 255, 0)
+        poly_color_ab = t["tier_color"] if is_ab_defect else (0, 255, 0)
 
         cp_ab = crop_p.copy()
         cr_ab = crop_r.copy()
@@ -873,9 +964,8 @@ def run_detailed_debug(product_path: str, return_path: str, base_debug_dir: str 
         crr_ab = cv2.resize(cr_ab, (crop_w, crop_h)) if cr_ab.size > 0 else np.zeros((crop_h, crop_w, 3), dtype=np.uint8)
 
         row_top_ab = np.hstack([cpr_ab, crr_ab])
-        status_ab = "LOI (DEFECT)" if is_ab_defect else "BINH THUONG (NORMAL)"
         cv2.putText(row_top_ab, "Product (Left) vs Return (Right) - KENH ab", (10, 22), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 2)
-        cv2.putText(row_top_ab, f"Tri #{t['id']}: [{status_ab}]", (10, 48), cv2.FONT_HERSHEY_SIMPLEX, 0.60, poly_color_ab, 2)
+        cv2.putText(row_top_ab, f"Tri #{t['id']}: [{t['tier_label']}]", (10, 48), cv2.FONT_HERSHEY_SIMPLEX, 0.60, poly_color_ab, 2)
         cv2.putText(row_top_ab, f"dE_ab={t.get('chroma_err', 0.0):.1f}, Blob_ab={t.get('max_chroma_blob', 0)}px", (10, crop_h - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 255, 255), 1)
 
         chroma_diff = t.get("patch_chroma_diff", np.zeros((72, 72), dtype=np.float32))
@@ -892,7 +982,7 @@ def run_detailed_debug(product_path: str, return_path: str, base_debug_dir: str 
         cv2.putText(info_panel_ab, f"- Khoi mau bat thuong (Blob): {t.get('max_chroma_blob', 0)} px", (15, 115), cv2.FONT_HERSHEY_SIMPLEX, 0.40, (255, 255, 255), 1)
         cv2.putText(info_panel_ab, f"- Khoang cach Wasserstein W_c: {t.get('w_chroma', 0.0):.2f}", (15, 155), cv2.FONT_HERSHEY_SIMPLEX, 0.40, (255, 255, 255), 1)
         cv2.putText(info_panel_ab, f"- Ty le mat hoa van mau: {t.get('lost_pattern_ratio', 0.0)*100:.1f}%", (15, 195), cv2.FONT_HERSHEY_SIMPLEX, 0.40, (255, 255, 255), 1)
-        cv2.putText(info_panel_ab, f"- Ket luan: {'LOI DOI MAU' if is_ab_defect else 'HOA VAN DONG MAU'}", (15, 230), cv2.FONT_HERSHEY_SIMPLEX, 0.45, poly_color_ab, 1)
+        cv2.putText(info_panel_ab, f"- Phan tang: {t['tier_label']}", (15, 230), cv2.FONT_HERSHEY_SIMPLEX, 0.45, poly_color_ab, 1)
 
         row_bot_ab = np.hstack([diff_ab_res, info_panel_ab])
         card_ab = np.vstack([row_top_ab, row_bot_ab])
@@ -900,17 +990,22 @@ def run_detailed_debug(product_path: str, return_path: str, base_debug_dir: str 
         fname_ab = f"{pfx_ab}_tri_{t['id']:03d}_he_mau_ab.jpg"
         cv2.imwrite(os.path.join(target_dir_ab, fname_ab), card_ab)
 
-    print(f"\n[Summary]:")
-    print(f"  Total Triangles Inspected: {len(triangles)}")
-    print(f"  Layer 2 Defective (Color): {len(layer2_flagged)}")
-    print(f"  Final True Defects Found:  {len(layer2_flagged)}")
+    print(f"\n[Summary 3-Tier Fusion]:")
+    print(f"  Total Triangles Inspected:          {len(triangles)}")
+    print(f"  Tier 1 - Chac chan loi (Do):        {len(tier1_confirmed)}")
+    print(f"  Tier 2 - Kha nang loi (Cam):        {len(tier2_probable)}")
+    print(f"  Tier 3 - Nghi van rieng le (Vang):  {len(tier3_isolated)}")
+    print(f"  Tong loi xac dinh (Tier 1 + 2):     {len(confirmed_and_probable)}")
     print(f"\nGranular Debug Subfolders ready at: {base_debug_dir}")
 
     return {
         "triangles": len(triangles),
+        "tier1_confirmed": len(tier1_confirmed),
+        "tier2_probable": len(tier2_probable),
+        "tier3_isolated": len(tier3_isolated),
         "l1_defects": 0,
-        "l2_defects": len(layer2_flagged),
-        "total_defects": len(layer2_flagged),
+        "l2_defects": len(confirmed_and_probable),
+        "total_defects": len(confirmed_and_probable),
         "debug_dir": base_debug_dir,
         "triangle_details": triangle_details,
     }
