@@ -684,9 +684,15 @@ def run_detailed_debug(product_path: str, return_path: str, base_debug_dir: str 
             item["new_color_ratio"] < 0.10
         )
 
+        # DINOv2 GATEKEEPER
+        is_high_sim_clean = bool(item["dino_sim"] >= 0.915)
+
         # 1.5. Vết đen / Vết nứt / Dị vật dập tắt sắc tố màu (Dark Crack & Achromatic Void):
-        # Vết mực đen hoặc vết nứt tối sâu đè lên hoa văn màu:
-        is_dark_chroma_void = bool(item.get("is_ink_stain", False))
+        # Chỉ công nhận là dị vật dập tắt sắc tố khi THỰC SỰ có xáo trộn màu sắc (blob >= 35px hoặc W_c >= 12.0):
+        is_dark_chroma_void = bool(
+            item.get("is_ink_stain", False) and 
+            (item.get("max_chroma_blob", 0) >= 35 or item.get("w_chroma", 0.0) >= 12.0)
+        )
 
         is_ab_raw = bool(
             (is_stain_intrusion or is_pattern_loss or is_chroma_damage or is_w_chroma_damage or is_dark_chroma_void) and
@@ -695,9 +701,8 @@ def run_detailed_debug(product_path: str, return_path: str, base_debug_dir: str 
 
         # DINOv2 GATEKEEPER CHO KÊNH ab:
         # Nếu DINOv2 xác nhận hoa văn/chất liệu cực kỳ đồng nhất (dino_sim >= 0.915)
-        # và không có vết đen ink/nứt vỡ, không có đốm màu khổng lồ (blob < 300px):
+        # và không có vết đen/dị vật lớn (blob < 300px):
         # -> Triệt tiêu báo ảo do trượt gradient màu cánh hoa/lông chim!
-        is_high_sim_clean = bool(item["dino_sim"] >= 0.915)
         if is_high_sim_clean and not is_dark_chroma_void and item["max_chroma_blob"] < 300:
             is_ab_method_damage = False
         else:
@@ -706,18 +711,28 @@ def run_detailed_debug(product_path: str, return_path: str, base_debug_dir: str 
         # Kênh L (Luminance & Độ sáng men) + DINOv2 Gatekeeper
         intrusive_verified = bool(item.get("is_intrusive_lum_blob", False) and not is_high_sim_clean)
 
+        # Phân biệt Vết mực đen ngoại lai thật sự (Tri #629, #131) vs Nét vẽ đen cũ có sẵn bị trượt vi nắn (Tri #39):
+        # Nếu DINOv2 cực cao (>= 0.915) và Kênh ab hoàn toàn sạch (max_chroma_blob < 20 và w_chroma < 10):
+        # chứng minh nét đen đó đã có sẵn trên Product và bề mặt đồng nhất -> Bác bỏ báo ảo!
+        is_existing_stroke_shift = bool(
+            is_high_sim_clean and 
+            item.get("max_chroma_blob", 0) < 20 and 
+            item.get("w_chroma", 0.0) < 10.0
+        )
+        real_ink_stain = bool(item.get("is_ink_stain", False) and not is_existing_stroke_shift)
+
         is_pattern_region = bool(item.get("p_edge_cnt", 0) >= 20)
         is_lum_conserved_pattern = bool(is_pattern_region and item.get("w_l", 0.0) < 8.0 and item["dino_sim"] >= 0.88)
 
         if is_pattern_region:
             is_lum_damage = bool(
-                (item.get("is_ink_stain", False) or intrusive_verified) and
+                (real_ink_stain or intrusive_verified) and
                 (item["lum_err"] >= 18.0) and
                 not is_lum_conserved_pattern
             )
         else:
             is_lum_damage = bool(
-                (item.get("is_ink_stain", False) or intrusive_verified) and
+                (real_ink_stain or intrusive_verified) and
                 (item["lum_err"] >= 18.0)
             )
 
@@ -751,8 +766,12 @@ def run_detailed_debug(product_path: str, return_path: str, base_debug_dir: str 
         is_both = bool(item["is_lum_damage"] and item["is_ab_method_damage"])
         is_flagged = bool(i in flagged_pool)
 
-        # Lỗi vật lý nặng rõ rệt (vết mực đen sâu / nứt vỡ thật sự có diện tích >= 45px)
-        is_severe_defect = bool(item.get("is_ink_stain", False) and item.get("ink_area", 0) >= 45)
+        # Lỗi vật lý nặng rõ rệt (vết mực đen sâu / nứt vỡ thật sự có diện tích >= 45px và không phải nét cũ)
+        is_severe_defect = bool(
+            item.get("is_ink_stain", False) and 
+            not (item.get("dino_sim", 0) >= 0.915 and item.get("max_chroma_blob", 0) < 20) and
+            item.get("ink_area", 0) >= 45
+        )
 
         if not is_flagged:
             item["defect_tier"] = 0
