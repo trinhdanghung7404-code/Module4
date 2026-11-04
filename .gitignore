@@ -1,0 +1,19 @@
+# Môi trường ảo
+.venv/
+venv/
+ENV/
+env/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Debug directories
+v2/debug/
+**/debug/
+debug/
+
+# Uploads runtime files
+uploads/*
+!uploads/.gitkeep
