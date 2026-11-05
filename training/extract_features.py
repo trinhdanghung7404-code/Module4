@@ -2,14 +2,12 @@
 training/extract_features.py
 ============================
 Trích xuất vector đặc trưng DINOv2 (384-dim) từ Sổ địa chỉ khuyết tật (ground_truth_defects.json)
-kèm lấy mẫu âm đối chứng (Nhãn 0: Men lành / Normal).
+kèm lấy mẫu âm đối chứng (Nhãn 0: Men lành / Normal) từ ảnh tách nền _nb.png.
 
-Nguyên lý:
-1. Nạp mô hình nền tảng DINOv2 (dinov2_vits14) ở chế độ đóng băng (Frozen).
-2. Chiếu tọa độ Bounding Box [x, y, w, h] lên lưới 32x32 patch (kích thước 14x14 pixel trên ảnh 448x448).
-3. Trích xuất vector vi sai Δf = |f_syn - f_ref| tại các ô patch khuyết tật (Nhãn 1, 2, 3).
-4. Lấy mẫu âm: Trích xuất các ô patch men lành nằm xa vùng lỗi (Nhãn 0).
-5. Lưu toàn bộ dữ liệu vào training/dataset_features.pt.
+Đặc tính:
+1. Đọc ảnh RGBA tách nền, đặt trên nền xám trung tính 128 (loại bỏ nhầm lẫn nền trắng).
+2. Lấy mẫu âm (Men lành) 100% bên trong thân bình dựa theo kênh Alpha (alpha > 0.8).
+3. Lưu toàn bộ dữ liệu vào training/dataset_features.pt.
 """
 
 import os
@@ -28,7 +26,6 @@ if sys.stdout:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     except Exception:
         pass
-
 
 
 def get_dinov2_backbone(device: torch.device):
@@ -54,7 +51,6 @@ def bbox_to_patch_indices(
     bx, by, bw, bh = bbox
     grid_size = target_size // patch_size  # 32
 
-    # Scale tọa độ sang target_size (448)
     scale_x = target_size / float(orig_w)
     scale_y = target_size / float(orig_h)
 
@@ -76,6 +72,29 @@ def bbox_to_patch_indices(
     return patch_indices
 
 
+def prepare_rgb_image(im_path: str, target_size: int = 448) -> Tuple[np.ndarray, np.ndarray]:
+    """Đọc ảnh RGBA và đặt lên nền xám trung tính 128"""
+    im = cv2.imread(im_path, cv2.IMREAD_UNCHANGED)
+    if im is None:
+        raise FileNotFoundError(f"Không tìm thấy ảnh: {im_path}")
+
+    h, w = im.shape[:2]
+    if len(im.shape) == 3 and im.shape[2] == 4:
+        alpha = im[:, :, 3].astype(np.float32) / 255.0
+        bgr = im[:, :, :3]
+    else:
+        bgr = im
+        alpha = np.ones((h, w), dtype=np.float32)
+
+    rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB).astype(np.float32)
+    # Ghép lên nền xám trung tính 128 (chống lẫn màu nền trắng)
+    composited = (rgb * alpha[:, :, None] + 128.0 * (1.0 - alpha[:, :, None])).astype(np.uint8)
+    resized_rgb = cv2.resize(composited, (target_size, target_size), interpolation=cv2.INTER_AREA)
+    resized_alpha = cv2.resize(alpha, (target_size, target_size), interpolation=cv2.INTER_AREA)
+
+    return resized_rgb, resized_alpha
+
+
 def extract_features_dataset(
     catalog_path: str,
     output_pt_path: str,
@@ -83,7 +102,7 @@ def extract_features_dataset(
     negative_samples_per_image: int = 3
 ) -> str:
     """
-    Đọc sổ địa chỉ và trích xuất vector huấn luyện
+    Đọc sổ địa chỉ và trích xuất vector huấn luyện từ ảnh _nb.png
     """
     device = torch.device("cpu")
     backbone = get_dinov2_backbone(device)
@@ -99,7 +118,7 @@ def extract_features_dataset(
     all_features = []
     all_labels = []
 
-    print(f"[EXTRACT] Bắt đầu trích xuất vector cho {len(records)} mục khuyết tật...")
+    print(f"[EXTRACT] Bắt đầu trích xuất vector từ ảnh tách nền cho {len(records)} mục khuyết tật...")
 
     for i, item in enumerate(records):
         syn_path = item["synthetic_image_path"]
@@ -111,14 +130,11 @@ def extract_features_dataset(
         if not (os.path.exists(syn_path) and os.path.exists(ref_path)):
             continue
 
-        syn_bgr = cv2.imread(syn_path)
-        ref_bgr = cv2.imread(ref_path)
-        if syn_bgr is None or ref_bgr is None:
+        try:
+            syn_rgb, syn_alpha = prepare_rgb_image(syn_path, target_size=448)
+            ref_rgb, ref_alpha = prepare_rgb_image(ref_path, target_size=448)
+        except Exception:
             continue
-
-        # Resize ảnh về 448x448 cho DINOv2
-        syn_rgb = cv2.cvtColor(cv2.resize(syn_bgr, (448, 448)), cv2.COLOR_BGR2RGB)
-        ref_rgb = cv2.cvtColor(cv2.resize(ref_bgr, (448, 448)), cv2.COLOR_BGR2RGB)
 
         t_syn = transform(syn_rgb).unsqueeze(0).to(device)
         t_ref = transform(ref_rgb).unsqueeze(0).to(device)
@@ -127,11 +143,9 @@ def extract_features_dataset(
             f_syn = backbone.get_intermediate_layers(t_syn, n=1)[0].squeeze(0)  # (1024, 384)
             f_ref = backbone.get_intermediate_layers(t_ref, n=1)[0].squeeze(0)  # (1024, 384)
 
-            # Chuẩn hóa L2 từng patch vector
             f_syn = f_syn / f_syn.norm(dim=-1, keepdim=True)
             f_ref = f_ref / f_ref.norm(dim=-1, keepdim=True)
 
-            # Vector vi sai |f_syn - f_ref|
             delta_f = torch.abs(f_syn - f_ref).cpu()
 
         # 1. Trích xuất vector vùng khuyết tật (Nhãn 1, 2, 3)
@@ -143,15 +157,10 @@ def extract_features_dataset(
             all_features.append(delta_f[p_idx])
             all_labels.append(class_id)
 
-        # 2. Lấy mẫu âm: Vùng men lành cách xa vết lỗi (Nhãn 0)
-        # Chỉ lấy trong khu vực thân bình (giữa ảnh, r: 8->24, c: 8->24)
+        # 2. Lấy mẫu âm (Men lành - Nhãn 0): 100% bên trong thân bình theo kênh Alpha
+        grid_alpha = cv2.resize(syn_alpha, (32, 32), interpolation=cv2.INTER_AREA).flatten()
         defect_set = set(defect_patch_idxs)
-        candidate_normals = []
-        for r in range(8, 25):
-            for c in range(8, 25):
-                idx = r * 32 + c
-                if idx not in defect_set:
-                    candidate_normals.append(idx)
+        candidate_normals = [idx for idx in range(1024) if (grid_alpha[idx] > 0.85 and idx not in defect_set)]
 
         if candidate_normals:
             sampled_negatives = random.sample(candidate_normals, min(negative_samples_per_image, len(candidate_normals)))
@@ -160,7 +169,7 @@ def extract_features_dataset(
                 all_labels.append(0)  # Nhãn 0: Normal
 
         if (i + 1) % 50 == 0 or (i + 1) == len(records):
-            print(f"  -> Đã xử lý {i + 1}/{len(records)} ảnh... (Tổng vector hiện tại: {len(all_features)})")
+            print(f"  -> Đã xử lý {i + 1}/{len(records)} ảnh... (Tổng vector: {len(all_features)})")
 
     features_tensor = torch.stack(all_features, dim=0)
     labels_tensor = torch.tensor(all_labels, dtype=torch.long)
@@ -173,12 +182,11 @@ def extract_features_dataset(
         "in_features": features_tensor.shape[1]
     }, output_pt_path)
 
-    # Thống kê phân phối nhãn
     counts = {0: 0, 1: 0, 2: 0, 3: 0}
     for l in all_labels:
         counts[l] = counts.get(l, 0) + 1
 
-    print("\n[EXTRACT] Hoàn tất trích xuất dữ liệu huấn luyện!")
+    print("\n[EXTRACT] Hoàn tất trích xuất dữ liệu sạch từ ảnh _nb.png!")
     print(f"  • Tổng số mẫu: {len(all_labels)} vector")
     print(f"  • Kích thước tensor: {features_tensor.shape}")
     print(f"  • Phân phối nhãn: 0 (Normal): {counts[0]} | 1 (Crack): {counts[1]} | 2 (Chip): {counts[2]} | 3 (Stain): {counts[3]}")

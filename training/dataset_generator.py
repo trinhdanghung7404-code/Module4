@@ -1,16 +1,11 @@
 """
 training/dataset_generator.py
 =============================
-Sinh dữ liệu khuyết tật gốm sứ giả lập có chiều sâu quang học (Physics-guided Defect Augmentation)
-kết hợp ghi chép "Sổ địa chỉ khuyết tật" (Ground-Truth Address Logging).
-
-Nguyên lý:
-1. Đọc các ảnh chuẩn B1 -> B21 từ data/reference_images/
-2. Cấy khuyết tật:
-   - Crack (Nhãn 1): Khe nứt vỡ rạn tóc có rãnh bóng đổ 3D và mép phản xạ men đón sáng.
-   - Chip (Nhãn 2): Vết sứt mẻ đa giác lộ xương gốm thô nhám.
-   - Stain (Nhãn 3): Vết ố loang màu men (trà, cà phê, lem mực).
-3. Tự động lưu "Sổ địa chỉ" [x, y, w, h] vào ground_truth_defects.json (Zero manual labeling).
+Sinh dữ liệu khuyết tật gốm sứ giả lập sử dụng trực tiếp các file ảnh đã tách nền _nb.png
+(từ data/ghost_overlays/) để đảm bảo:
+1. Mặt nạ thân bình chuẩn 100% từ kênh Alpha (loại bỏ hoàn toàn nền trắng và móc sắt).
+2. Khuyết tật chỉ được cấy bên trong lòng thân bình (inner_mask).
+3. Tự động ghi chép "Sổ địa chỉ khuyết tật" [x, y, w, h] vào ground_truth_defects.json.
 """
 
 import os
@@ -29,13 +24,12 @@ if sys.stdout:
         pass
 
 
-
 def generate_crack_contour(start_pt: Tuple[int, int], length: int = 80, num_steps: int = 15) -> List[Tuple[int, int]]:
     """Tạo đường đi ngẫu nhiên ziczac mô phỏng vết nứt gốm sứ"""
     pts = [start_pt]
     curr_x, curr_y = start_pt
     angle = random.uniform(0, 2 * np.pi)
-    
+
     for _ in range(num_steps):
         step_len = length / num_steps
         angle += random.uniform(-0.5, 0.5)
@@ -60,7 +54,7 @@ def inject_crack(img_bgr: np.ndarray, mask: np.ndarray) -> Tuple[np.ndarray, np.
 
     idx = random.randint(0, len(valid_ys) - 1)
     start_pt = (valid_xs[idx], valid_ys[idx])
-    
+
     crack_pts = generate_crack_contour(start_pt, length=random.randint(40, 110), num_steps=random.randint(10, 20))
     pts_arr = np.array(crack_pts, dtype=np.int32)
 
@@ -83,19 +77,17 @@ def inject_crack(img_bgr: np.ndarray, mask: np.ndarray) -> Tuple[np.ndarray, np.
         pt2 = (pts_arr[i + 1][0] + offset_x, pts_arr[i + 1][1] + offset_y)
         cv2.line(out_img, pt1, pt2, (230, 230, 230), thickness=1, lineType=cv2.LINE_AA)
 
-    # Tính bounding box
-    xs = pts_arr[:, 0]
-    ys = pts_arr[:, 1]
-    bx, by = int(np.min(xs)), int(np.min(ys))
-    bw, bh = int(np.max(xs) - bx + 1), int(np.max(ys) - by + 1)
-    
-    # Padding nhẹ cho bbox
-    bx = max(0, bx - 4)
-    by = max(0, by - 4)
-    bw = min(w - bx, bw + 8)
-    bh = min(h - by, bh + 8)
+    # Giữ vết nứt chỉ nằm trong mask thân bình
+    out_img[mask == 0] = img_bgr[mask == 0]
+    defect_mask[mask == 0] = 0
 
-    return out_img, defect_mask, [bx, by, bw, bh]
+    cnts, _ = cv2.findContours(defect_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if cnts:
+        bx, by, bw, bh = cv2.boundingRect(max(cnts, key=cv2.contourArea))
+    else:
+        bx, by, bw, bh = 0, 0, 0, 0
+
+    return out_img, defect_mask, [int(bx), int(by), int(bw), int(bh)]
 
 
 def inject_chip(img_bgr: np.ndarray, mask: np.ndarray) -> Tuple[np.ndarray, np.ndarray, List[int]]:
@@ -124,12 +116,12 @@ def inject_chip(img_bgr: np.ndarray, mask: np.ndarray) -> Tuple[np.ndarray, np.n
         poly_pts.append([px, py])
     poly_arr = np.array(poly_pts, dtype=np.int32)
 
-    # Điền màu xương gốm thô nhám (màu đất nung / xám ngà có hạt cát)
     chip_color = np.array([random.randint(130, 160), random.randint(145, 175), random.randint(160, 190)], dtype=np.uint8)
     noise = np.random.normal(0, 12, (h, w, 3)).astype(np.int16)
 
     chip_mask = np.zeros((h, w), dtype=np.uint8)
     cv2.fillPoly(chip_mask, [poly_arr], 255)
+    chip_mask = cv2.bitwise_and(chip_mask, mask)
 
     # Viền sứt mẻ có cạnh bóng tối
     cv2.polylines(out_img, [poly_arr], isClosed=True, color=(35, 35, 35), thickness=2, lineType=cv2.LINE_AA)
@@ -139,9 +131,15 @@ def inject_chip(img_bgr: np.ndarray, mask: np.ndarray) -> Tuple[np.ndarray, np.n
         blended = np.clip(chip_color[c] + noise[..., c], 0, 255).astype(np.uint8)
         out_img[chip_mask > 0, c] = blended[chip_mask > 0]
 
-    defect_mask = cv2.bitwise_or(defect_mask, chip_mask)
+    out_img[mask == 0] = img_bgr[mask == 0]
+    defect_mask = chip_mask
 
-    bx, by, bw, bh = cv2.boundingRect(poly_arr)
+    cnts, _ = cv2.findContours(defect_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if cnts:
+        bx, by, bw, bh = cv2.boundingRect(max(cnts, key=cv2.contourArea))
+    else:
+        bx, by, bw, bh = 0, 0, 0, 0
+
     return out_img, defect_mask, [int(bx), int(by), int(bw), int(bh)]
 
 
@@ -176,26 +174,30 @@ def inject_stain(img_bgr: np.ndarray, mask: np.ndarray) -> Tuple[np.ndarray, np.
     blob = cv2.GaussianBlur(blob, (35, 35), 0)
     blob[mask < 100] = 0.0
 
-    alpha = np.clip(blob * random.uniform(0.55, 0.85), 0.0, 1.0)[..., np.newaxis]
-    out_img = (out_img * (1.0 - alpha) + target_color * alpha).astype(np.uint8)
+    alpha_blend = np.clip(blob * random.uniform(0.55, 0.85), 0.0, 1.0)[..., np.newaxis]
+    out_img = (out_img * (1.0 - alpha_blend) + target_color * alpha_blend).astype(np.uint8)
+    out_img[mask == 0] = img_bgr[mask == 0]
 
     defect_mask = (blob > 0.15).astype(np.uint8) * 255
+    defect_mask[mask == 0] = 0
+
     cnts, _ = cv2.findContours(defect_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     if cnts:
         bx, by, bw, bh = cv2.boundingRect(max(cnts, key=cv2.contourArea))
     else:
-        bx, by, bw, bh = cx - rx, cy - ry, 2 * rx, 2 * ry
+        bx, by, bw, bh = 0, 0, 0, 0
 
     return out_img, defect_mask, [int(bx), int(by), int(bw), int(bh)]
 
 
 def build_synthetic_dataset(
-    ref_images_dir: str,
+    ghost_overlays_dir: str,
     output_dir: str,
     samples_per_vase: int = 2
 ) -> str:
     """
-    Duyệt qua các bình chuẩn, cấy 3 loại lỗi và ghi lại Sổ địa chỉ metadata
+    Đọc trực tiếp các file ảnh đã tách nền _nb.png từ data/ghost_overlays/
+    Lấy kênh Alpha làm mask chuẩn 100%, cấy lỗi hoàn toàn bên trong thân bình.
     """
     os.makedirs(output_dir, exist_ok=True)
     images_out_dir = os.path.join(output_dir, "synthetic_images")
@@ -208,51 +210,68 @@ def build_synthetic_dataset(
         ("stain", 3, inject_stain)
     ]
 
-    print(f"[GEN] Bắt đầu sinh dữ liệu khuyết tật từ: {ref_images_dir}")
-    vase_folders = sorted([d for d in os.listdir(ref_images_dir) if os.path.isdir(os.path.join(ref_images_dir, d))])
+    view_specs = [
+        ("01_front", "truoc_nb.png"),
+        ("02_back", "sau_nb.png"),
+        ("03_left", "trai_nb.png"),
+        ("04_right", "phai_nb.png")
+    ]
+
+    print(f"[GEN] Bắt đầu sinh dữ liệu khuyết tật từ ảnh tách nền (_nb.png) tại: {ghost_overlays_dir}")
+    vase_folders = sorted([d for d in os.listdir(ghost_overlays_dir) if os.path.isdir(os.path.join(ghost_overlays_dir, d))])
 
     total_generated = 0
     for vase_id in vase_folders:
-        vase_path = os.path.join(ref_images_dir, vase_id)
-        views = sorted([v for v in os.listdir(vase_path) if os.path.isdir(os.path.join(vase_path, v))])
+        vase_path = os.path.join(ghost_overlays_dir, vase_id)
 
-        for view_name in views:
-            img_path = os.path.join(vase_path, view_name, "anh_chuan.jpg")
-            if not os.path.exists(img_path):
+        for view_name, nb_filename in view_specs:
+            nb_path = os.path.join(vase_path, nb_filename)
+            if not os.path.exists(nb_path):
                 continue
 
-            img = cv2.imread(img_path)
-            if img is None:
+            # Đọc ảnh 4 kênh RGBA
+            im_rgba = cv2.imread(nb_path, cv2.IMREAD_UNCHANGED)
+            if im_rgba is None or len(im_rgba.shape) != 3:
                 continue
 
-            # Tạo mask đơn giản cho thân bình (vùng khác màu trắng nền)
-            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-            mask = ((img[..., 0] < 240) | (img[..., 1] < 240) | (img[..., 2] < 240)).astype(np.uint8) * 255
-            mask = cv2.erode(mask, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15, 15)))
+            if im_rgba.shape[2] == 4:
+                bgr = im_rgba[:, :, :3]
+                alpha = im_rgba[:, :, 3]
+            else:
+                bgr = im_rgba
+                alpha = np.ones((bgr.shape[0], bgr.shape[1]), dtype=np.uint8) * 255
+
+            # Mặt nạ thân bình chuẩn 100% từ kênh Alpha (loại bỏ móc sắt và nền ngoài)
+            mask = (alpha > 200).astype(np.uint8) * 255
+            # Thu hẹp mặt nạ 15px để đảm bảo không chạm viền ngoài
+            inner_mask = cv2.erode(mask, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15, 15)))
 
             for defect_name, class_id, defect_func in defect_funcs:
                 for rep in range(samples_per_vase):
-                    syn_img, d_mask, bbox = defect_func(img, mask)
+                    syn_bgr, d_mask, bbox = defect_func(bgr, inner_mask)
                     bx, by, bw, bh = bbox
                     if bw < 5 or bh < 5:
                         continue
 
+                    # Đóng gói ảnh PNG có kênh Alpha trong suốt
+                    syn_rgba = np.dstack([syn_bgr, alpha])
+
                     item_id = f"{vase_id}_{view_name}_{defect_name}_{rep:02d}"
-                    syn_filename = f"{item_id}.jpg"
+                    syn_filename = f"{item_id}.png"
                     syn_filepath = os.path.join(images_out_dir, syn_filename)
-                    cv2.imwrite(syn_filepath, syn_img)
+                    cv2.imwrite(syn_filepath, syn_rgba)
 
                     record = {
                         "defect_id": total_generated + 1,
                         "item_id": item_id,
                         "vase_id": vase_id,
                         "view_name": view_name,
-                        "reference_image_path": img_path,
+                        "reference_image_path": nb_path,
                         "synthetic_image_path": syn_filepath,
                         "defect_type": defect_name,
                         "class_id": class_id,
                         "bbox_xywh": [bx, by, bw, bh],
-                        "image_size": [img.shape[1], img.shape[0]]  # [w, h]
+                        "image_size": [bgr.shape[1], bgr.shape[0]]  # [w, h]
                     }
                     catalog.append(record)
                     total_generated += 1
@@ -261,13 +280,13 @@ def build_synthetic_dataset(
     with open(catalog_path, "w", encoding="utf-8") as f:
         json.dump(catalog, f, indent=2, ensure_ascii=False)
 
-    print(f"[GEN] Đã tạo thành công {total_generated} mẫu khuyết tật!")
+    print(f"[GEN] Đã tạo thành công {total_generated} mẫu khuyết tật chuẩn xác bên trong thân bình!")
     print(f"[GEN] Sổ địa chỉ đã được lưu tại: {catalog_path}")
     return catalog_path
 
 
 if __name__ == "__main__":
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    ref_dir = os.path.join(base_dir, "data", "reference_images")
+    ghost_dir = os.path.join(base_dir, "data", "ghost_overlays")
     out_dir = os.path.join(base_dir, "training")
-    build_synthetic_dataset(ref_dir, out_dir, samples_per_vase=2)
+    build_synthetic_dataset(ghost_dir, out_dir, samples_per_vase=2)

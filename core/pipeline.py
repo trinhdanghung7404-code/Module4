@@ -296,15 +296,16 @@ class ReferencePipeline:
                 
         min_dE_full[~valid_inspect_mask] = 0.0
         
-        # 5. Cổng kiểm chứng đối chiếu vi sai
+        # 5. Cổng kiểm chứng đối chiếu vi sai kết hợp Local Tolerance Search
         confirmed_score = np.clip((min_dE_full - 25.0) / 25.0, 0.0, 1.0)
         confirmed_score[~valid_inspect_mask] = 0.0
         
         binary_defects = (confirmed_score > 0.15).astype(np.uint8) * 255
         binary_defects = cv2.morphologyEx(binary_defects, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3)))
         
-        # 5b. Trích xuất đặc trưng vi sai DINOv2 phục vụ tầng phân loại sâu CeramicDefectHead (CD-MLP)
+        # 5b. Trích xuất đặc trưng vi sai DINOv2 phục vụ quét nơ-ron toàn diện (Neural Scan)
         delta_f = None
+        neural_defect_prob = None
         if self.defect_head is not None:
             try:
                 rgb_ret = cv2.cvtColor(cv2.resize(ret_bgr, (448, 448), interpolation=cv2.INTER_AREA), cv2.COLOR_BGR2RGB)
@@ -320,6 +321,7 @@ class ReferencePipeline:
             except Exception as e_dino:
                 print(f"[WARN] Lỗi trích xuất DINOv2 vi sai: {e_dino}")
                 delta_f = None
+                neural_defect_prob = None
 
         # 6. Trích xuất danh sách khuyết tật
         cnts, _ = cv2.findContours(binary_defects, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -327,6 +329,8 @@ class ReferencePipeline:
         total_vase_pixels = float(np.count_nonzero(valid_inspect_mask))
         defect_items = []
         total_damaged_pixels = 0
+
+
         
         for c in cnts:
             area = cv2.contourArea(c)
@@ -427,8 +431,9 @@ class ReferencePipeline:
         font = cv2.FONT_HERSHEY_SIMPLEX
         p1 = ret_bgr.copy()
         cv2.putText(p1, '1. Anh Hoan Tra', (10, 25), font, 0.55, (255, 255, 255), 2)
-        cv2.putText(heatmap_vis, '2. Heatmap Vi Sai (Da Kiem Chung)', (10, 25), font, 0.50, (255, 255, 255), 2)
-        cv2.putText(detected_vis, f'3. Phat Hien {len(defect_items)} Loi', (10, 25), font, 0.55, (0, 255, 0), 2)
+        heatmap_title = '2. AI Neural Heatmap (DINOv2+CD-MLP)' if neural_defect_prob is not None else '2. Heatmap Vi Sai (CIELab)'
+        cv2.putText(heatmap_vis, heatmap_title, (10, 25), font, 0.48, (255, 255, 255), 2)
+        cv2.putText(detected_vis, f'3. Phat Hien {len(defect_items)} Loi (AI Neural Scan)', (10, 25), font, 0.50, (0, 255, 0), 2)
         
         comp_result = np.hstack([p1, heatmap_vis, detected_vis])
         

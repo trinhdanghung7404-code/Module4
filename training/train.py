@@ -295,14 +295,14 @@ def run_full_pipeline():
     cat_path = os.path.join(training_dir, "ground_truth_defects.json")
     pt_dataset_path = os.path.join(training_dir, "dataset_features.pt")
     output_model_path = os.path.join(training_dir, "defect_head.pt")
-    ref_images_dir = os.path.join(base_dir, "data", "reference_images")
+    ghost_overlays_dir = os.path.join(base_dir, "data", "ghost_overlays")
 
     # 1. Kiểm tra tập dữ liệu
     if not os.path.exists(pt_dataset_path):
         print("[AUTO] Chưa có dataset_features.pt, tiến hành tự động tạo...")
         if not os.path.exists(cat_path):
             from dataset_generator import build_synthetic_dataset
-            build_synthetic_dataset(ref_images_dir, training_dir, samples_per_vase=2)
+            build_synthetic_dataset(ghost_overlays_dir, training_dir, samples_per_vase=2)
         from extract_features import extract_features_dataset
         extract_features_dataset(cat_path, pt_dataset_path)
 
