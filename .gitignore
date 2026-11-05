@@ -17,3 +17,6 @@ debug/
 # Uploads runtime files
 uploads/*
 !uploads/.gitkeep
+
+# Temporary synthetic generated images (re-generated on demand)
+training/synthetic_images/

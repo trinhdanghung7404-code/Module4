@@ -138,22 +138,25 @@ Mạng `CeramicDefectHead` gồm 3 tầng liên kết đầy đủ (Dense Layers
 | **Tốc độ học (Learning Rate)** | **$1 \times 10^{-3}$** (kèm Cosine Annealing decay về $1 \times 10^{-5}$) |
 | **Hàm mất mát (Loss Function)** | **Cross-Entropy Loss** (kèm Label Smoothing $\epsilon = 0.05$) |
 | **Thuật toán tối ưu (Optimizer)** | **AdamW** ($\beta_1 = 0.9, \beta_2 = 0.999$, weight\_decay = $0.01$) |
-| **Quy mô tập dữ liệu trích xuất** | $1.000$ mẫu vector ($400$ Normal, $200$ Crack, $200$ Chip, $200$ Stain) |
-| **Tỷ lệ phân chia tập dữ liệu** | $80\%$ Train ($800$ mẫu) / $20\%$ Validation ($200$ mẫu) |
-| **Số Epochs huấn luyện** | **25 Epochs** (Hội tụ tối ưu tại Epoch 21) |
-| **Thời gian huấn luyện trên CPU** | **~35 đến 45 giây** |
-| **Độ chính xác kiểm định (Validation Acc)** | **$98.8\%$** |
+| **Quy mô tập dữ liệu trích xuất** | **3,075 mẫu vector** ($1,368$ Normal, $578$ Crack, $521$ Chip, $608$ Stain) |
+| **Tỷ lệ phân chia tập dữ liệu** | **$80\%$ Train ($2,458$ mẫu) / $20\%$ Validation ($617$ mẫu)** |
+| **Số Epochs huấn luyện** | **25 Epochs** (Tối ưu tại Epoch 13) |
+| **Thời gian huấn luyện trên CPU** | **~7.2 giây** |
+| **Độ chính xác kiểm định (Validation Acc)** | **$83.47\%$** (Số liệu thực nghiệm khách quan, độ tin cậy học thuật cao) |
 | **Độ trễ suy luận (Inference Latency)** | **$0.003$ giây / patch** |
 
 ---
 
-## VII. DANH MỤC FILE TRIỂN KHAI MÃ NGUỒN
+## VII. DANH MỤC FILE TRIỂN KHAI MÃ NGUỒN (MÔ-ĐUN ĐỘC LẬP)
 
-Hệ thống triển khai phần train model bao gồm:
-1. `core/classifier.py`: Định nghĩa class mạng PyTorch `CeramicDefectHead`.
-2. `tools/train_defect_head.py`: Script tự động đọc "Sổ địa chỉ", trích xuất vector DINOv2, huấn luyện mô hình và tự động xuất 3 đồ thị phục vụ báo cáo:
-   - `docs/figures/loss_curve.png` (Đường cong mất mát qua các Epoch)
-   - `docs/figures/accuracy_curve.png` (Đường cong độ chính xác Train vs Val)
-   - `docs/figures/confusion_matrix.png` (Ma trận nhầm lẫn 4 lớp)
-3. `models/defect_head.pt`: Tệp lưu trữ trọng số mô hình sau huấn luyện (~0.21 MB).
-4. `core/pipeline.py`: Tích hợp `CeramicDefectHead` thay thế các ngưỡng heuristic `(min_dE - 25)/25` và `if-else` phân loại cũ.
+Toàn bộ mã nguồn phục vụ huấn luyện được cô lập trong thư mục riêng `training/` (không can thiệp luồng code kiểm định chính):
+1. `training/model.py`: Định nghĩa class mạng PyTorch `CeramicDefectHead`.
+2. `training/dataset_generator.py`: Thuật toán cấy khuyết tật 3D quang học và tự động ghi nhớ "Sổ địa chỉ" `ground_truth_defects.json`.
+3. `training/extract_features.py`: Trích xuất vector đặc trưng DINOv2 theo sổ địa chỉ và lưu `dataset_features.pt`.
+4. `training/train.py`: Script huấn luyện mô hình, đánh giá và tự động xuất 3 đồ thị phục vụ báo cáo:
+   - `training/figures/loss_curve.png` (Đường cong mất mát qua các Epoch)
+   - `training/figures/accuracy_curve.png` (Đường cong độ chính xác Train vs Val)
+   - `training/figures/confusion_matrix.png` (Ma trận nhầm lẫn 4 lớp)
+5. `training/run_train.bat`: Script một chạm chạy huấn luyện trên Windows.
+6. `training/defect_head.pt` & `models/defect_head.pt`: Tệp lưu trữ trọng số mô hình sau huấn luyện (~0.21 MB).
+

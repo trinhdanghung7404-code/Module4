@@ -87,6 +87,26 @@ class ReferencePipeline:
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         ])
+
+        # Tải tầng nơ-ron phân loại khuyết tật CeramicDefectHead (CD-MLP)
+        self.defect_head = None
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        candidate_weights = [
+            os.path.join(base_dir, "models", "defect_head.pt"),
+            os.path.join(base_dir, "training", "defect_head.pt")
+        ]
+        for w_path in candidate_weights:
+            if os.path.exists(w_path):
+                try:
+                    from core.classifier import CeramicDefectHead
+                    head = CeramicDefectHead(in_features=384, num_classes=4)
+                    head.load_weights(w_path, device=str(self.device))
+                    self.defect_head = head
+                    print(f"[INIT] Đã nạp tầng phân loại sâu CeramicDefectHead từ: {w_path}")
+                    break
+                except Exception as e_head:
+                    print(f"[WARN] Không thể nạp defect_head: {e_head}")
+
         print("[INIT] Khởi tạo ReferencePipeline thành công!")
 
     def extract_vase_mask(self, img_bgr: np.ndarray) -> np.ndarray:
@@ -283,6 +303,24 @@ class ReferencePipeline:
         binary_defects = (confirmed_score > 0.15).astype(np.uint8) * 255
         binary_defects = cv2.morphologyEx(binary_defects, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3)))
         
+        # 5b. Trích xuất đặc trưng vi sai DINOv2 phục vụ tầng phân loại sâu CeramicDefectHead (CD-MLP)
+        delta_f = None
+        if self.defect_head is not None:
+            try:
+                rgb_ret = cv2.cvtColor(cv2.resize(ret_bgr, (448, 448), interpolation=cv2.INTER_AREA), cv2.COLOR_BGR2RGB)
+                rgb_ref = cv2.cvtColor(cv2.resize(ref_warped, (448, 448), interpolation=cv2.INTER_AREA), cv2.COLOR_BGR2RGB)
+                t_ret = self.transform(rgb_ret).unsqueeze(0).to(self.device)
+                t_ref = self.transform(rgb_ref).unsqueeze(0).to(self.device)
+                with torch.no_grad():
+                    f_ret = self.backbone.get_intermediate_layers(t_ret, n=1)[0].squeeze(0)
+                    f_ref = self.backbone.get_intermediate_layers(t_ref, n=1)[0].squeeze(0)
+                    f_ret = f_ret / f_ret.norm(dim=-1, keepdim=True)
+                    f_ref = f_ref / f_ref.norm(dim=-1, keepdim=True)
+                    delta_f = torch.abs(f_ret - f_ref)  # (1024, 384)
+            except Exception as e_dino:
+                print(f"[WARN] Lỗi trích xuất DINOv2 vi sai: {e_dino}")
+                delta_f = None
+
         # 6. Trích xuất danh sách khuyết tật
         cnts, _ = cv2.findContours(binary_defects, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         detected_vis = ret_bgr.copy()
@@ -293,25 +331,78 @@ class ReferencePipeline:
         for c in cnts:
             area = cv2.contourArea(c)
             arc_len = cv2.arcLength(c, False)
-            if area >= 8 or arc_len >= 15:
+            if (area >= 20 or arc_len >= 25) and max(cv2.boundingRect(c)[2:]) >= 8:
                 x, y, w, h = cv2.boundingRect(c)
                 if not (w > w_r * 0.85 and h > h_r * 0.85) and area < total_vase_pixels * 0.5:
+                    pred_label_str = None
+                    pred_conf = 0.0
+                    pred_cat = None
+                    pred_color = (0, 0, 255)
+
+                    # Phân loại bằng mạng nơ-ron CeramicDefectHead (CD-MLP)
+                    if self.defect_head is not None and delta_f is not None:
+                        scale_x = 448.0 / max(1, w_r)
+                        scale_y = 448.0 / max(1, h_r)
+                        cx = int((x + w / 2.0) * scale_x)
+                        cy = int((y + h / 2.0) * scale_y)
+                        c_idx = max(0, min(31, cx // 14))
+                        r_idx = max(0, min(31, cy // 14))
+                        p_idx = r_idx * 32 + c_idx
+
+                        with torch.no_grad():
+                            p_vec = delta_f[p_idx].unsqueeze(0).to(self.device)
+                            logits = self.defect_head(p_vec)
+                            probs = torch.softmax(logits, dim=-1)[0]
+                            pred_class = int(torch.argmax(probs).item())
+                            pred_conf = float(probs[pred_class].item())
+
+                        # 1. Nếu mô hình CD-MLP nhận định là Men lành (Normal - nhãn 0): triệt tiêu báo lỗi giả
+                        if pred_class == 0:
+                            continue
+
+                        # 2. Nếu là khuyết tật nhưng độ tin cậy quá thấp (< 60%): bỏ qua nhiễu viền
+                        if pred_conf < 0.60:
+                            continue
+
+                        if pred_class == 1:
+                            pred_cat = "crack"
+                            pred_label_str = f"VET NUT ({int(pred_conf*100)}%)"
+                            pred_color = (0, 0, 255)      # Đỏ
+                        elif pred_class == 2:
+                            pred_cat = "chip"
+                            pred_label_str = f"VET ME ({int(pred_conf*100)}%)"
+                            pred_color = (0, 255, 255)    # Vàng
+                        elif pred_class == 3:
+                            pred_cat = "stain"
+                            pred_label_str = f"VET O ({int(pred_conf*100)}%)"
+                            pred_color = (0, 140, 255)    # Cam
+                        else:
+                            pred_cat = "defect"
+                            pred_label_str = f"KHUYET TAT ({int(pred_conf*100)}%)"
+                            pred_color = (0, 0, 255)
+
+                    # Fallback theo đặc tính màu nếu chưa có defect_head
+                    if pred_label_str is None:
+                        ret_roi = ret_bgr[y:y+h, x:x+w]
+                        roi_gray = cv2.cvtColor(ret_roi, cv2.COLOR_BGR2GRAY)
+                        if np.percentile(roi_gray, 5) < 70 or np.mean(roi_gray) < 80:
+                            pred_cat = "crack_or_dark_hole"
+                            pred_label_str = "VET NUT/VO"
+                            pred_color = (0, 0, 255)
+                        elif np.std(ret_roi[..., 0].astype(np.float32) - ret_roi[..., 2].astype(np.float32)) > 15:
+                            pred_cat = "ink_mark_color"
+                            pred_label_str = "VET MUC/O MAU"
+                            pred_color = (0, 140, 255)
+                        else:
+                            pred_cat = "surface_anomaly"
+                            pred_label_str = "VET ME/XUOC"
+                            pred_color = (0, 255, 255)
+
+                    cat = pred_cat
+                    label = pred_label_str
+                    color = pred_color
                     total_damaged_pixels += area
-                    ret_roi = ret_bgr[y:y+h, x:x+w]
-                    roi_gray = cv2.cvtColor(ret_roi, cv2.COLOR_BGR2GRAY)
-                    
-                    if np.percentile(roi_gray, 5) < 70 or np.mean(roi_gray) < 80:
-                        cat = "crack_or_dark_hole"
-                        label = "VET NUT/VO"
-                        color = (0, 0, 255)
-                    elif np.std(ret_roi[..., 0].astype(np.float32) - ret_roi[..., 2].astype(np.float32)) > 15:
-                        cat = "ink_mark_color"
-                        label = "VET MUC/O MAU"
-                        color = (0, 140, 255)
-                    else:
-                        cat = "surface_anomaly"
-                        label = "VET ME/XUOC"
-                        color = (0, 255, 255)
+
                         
                     cv2.drawContours(detected_vis, [c], -1, color, 3)
                     if max(w, h) <= 80:
