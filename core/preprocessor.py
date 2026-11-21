@@ -64,25 +64,28 @@ def get_onnx_segmenter_session():
 def remove_background_gray(bgr_img, gray_value=40):
     """
     Tách nền, tô nền bằng màu XÁM TRUNG TÍNH (không dùng đen tuyệt đối).
-    Lý do dùng xám: đen tuyệt đối [0,0,0] tạo cạnh tương phản quá gắt ngay tại biên
-    vật thể/nền, dễ bị các thuật toán so sánh (SuperPoint, SIFT) hiểu nhầm thành
-    1 cạnh vật lý thật -> gây nhiễu ngược lại cho bước so sánh sau này.
+    Ưu tiên BiRefNet/RemBG (qua get_rembg_session), sau đó ONNX u2netp,
+    cuối cùng fallback OpenCV Otsu có nhận diện nền sáng/tối.
     """
     orig_h, orig_w = bgr_img.shape[:2]
     object_mask = None
 
-    # 1. Thử rembg nếu khả dụng
-    if _HAS_REMBG and remove is not None:
+    # 1. Thử RemBG BiRefNet/u2net (dùng session dùng chung)
+    rembg_sess = get_rembg_session()
+    if rembg_sess:
         try:
+            from rembg import remove as rembg_remove
             rgb_img = cv2.cvtColor(bgr_img, cv2.COLOR_BGR2RGB)
-            pil_img = Image.fromarray(rgb_img)
-            buf = io.BytesIO()
-            pil_img.save(buf, format="PNG")
-            result_bytes = remove(buf.getvalue())
-            result_img = Image.open(io.BytesIO(result_bytes)).convert("RGBA")
-            result_np = np.array(result_img)
-            object_mask = result_np[:, :, 3]
-        except Exception:
+            out_pil = rembg_remove(Image.fromarray(rgb_img), session=rembg_sess, only_mask=True)
+            alpha_raw = np.array(out_pil)
+            num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(alpha_raw)
+            if num_labels > 1:
+                largest_label = 1 + np.argmax(stats[1:, cv2.CC_STAT_AREA])
+                object_mask = (labels == largest_label).astype(np.uint8) * 255
+            else:
+                object_mask = alpha_raw
+        except Exception as e:
+            print(f"[WARN] RemBG remove_background_gray loi: {e}")
             object_mask = None
 
     # 2. Thử mô hình ONNX u2netp trực tiếp (an toàn trên Windows AppLocker)
@@ -110,14 +113,27 @@ def remove_background_gray(bgr_img, gray_value=40):
                 print(f"[WARN] ONNX inference loi: {e}")
                 object_mask = None
 
-    # 3. Fallback thuần OpenCV Otsu
+    # 3. Fallback thuần OpenCV Otsu (tự động đảo ngưỡng nếu nền sáng)
     if object_mask is None:
         gray = cv2.cvtColor(bgr_img, cv2.COLOR_BGR2GRAY)
         blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-        _, thresh = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        corners = np.concatenate([
+            gray[:20, :20].ravel(),
+            gray[:20, -20:].ravel(),
+            gray[-20:, :20].ravel(),
+            gray[-20:, -20:].ravel(),
+        ])
+        thresh_flag = cv2.THRESH_BINARY_INV if np.median(corners) > 180 else cv2.THRESH_BINARY
+        _, thresh = cv2.threshold(blurred, 0, 255, thresh_flag + cv2.THRESH_OTSU)
         kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
         closed = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel, iterations=2)
-        object_mask = cv2.morphologyEx(closed, cv2.MORPH_OPEN, kernel, iterations=2)
+        opened = cv2.morphologyEx(closed, cv2.MORPH_OPEN, kernel, iterations=2)
+        num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(opened)
+        if num_labels > 1:
+            largest_label = 1 + np.argmax(stats[1:, cv2.CC_STAT_AREA])
+            object_mask = (labels == largest_label).astype(np.uint8) * 255
+        else:
+            object_mask = opened
 
     # Tô nền bằng màu xám trung tính (gray_value)
     alpha = (object_mask.astype(np.float64) / 255.0)[:, :, np.newaxis]
@@ -298,10 +314,11 @@ def build_ignore_mask(bgr_img, object_mask):
     saturated = detect_saturated_mask(bgr_img, object_mask)
 
     ignore_mask = cv2.bitwise_or(specular, saturated)
+    ignore_mask = cv2.bitwise_and(ignore_mask, object_mask)
 
     object_area = int((object_mask > 10).sum())
     ignore_area = int((ignore_mask > 10).sum())
-    ignore_ratio = ignore_area / object_area if object_area > 0 else 0.0
+    ignore_ratio = min(1.0, ignore_area / object_area) if object_area > 0 else 0.0
 
     return {
         "specular_mask": specular,

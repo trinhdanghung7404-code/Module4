@@ -26,6 +26,7 @@ if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 from fastapi import FastAPI, Request, UploadFile, File, Form, Query
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -36,7 +37,7 @@ from config import (
     PROFILES_DIR, GHOST_IMAGES_DIR, TEMPLATES_DIR, UPLOADS_DIR, CLOUDFLARED_BIN,
     SESSION_EXPIRE_MINUTES, VIEWS, VIEW_LABELS, AUTO_CAPTURE,
 )
-from core.pipeline import ReferencePipeline, resolve_profile_id
+from core.pipeline import ReferencePipeline, resolve_profile_id, deduplicate_cross_view_defects
 from core.preprocessor import process_and_detect
 from core.matcher import (
     process_single_ghost_image,
@@ -130,10 +131,10 @@ async def list_products():
 @app.post("/api/product/upload")
 async def upload_product_images(
     product_id: str = Form(...),
-    truoc: UploadFile = File(None),
-    sau: UploadFile = File(None),
-    trai: UploadFile = File(None),
-    phai: UploadFile = File(None),
+    front: UploadFile = File(None),
+    back: UploadFile = File(None),
+    left: UploadFile = File(None),
+    right: UploadFile = File(None),
 ):
     """
     Tải lên ảnh gốc sản phẩm -> tự động tạo bóng mờ và lưu vào kho mẫu.
@@ -146,10 +147,10 @@ async def upload_product_images(
     os.makedirs(target_dir, exist_ok=True)
 
     uploaded_files = {
-        "truoc": truoc,
-        "sau": sau,
-        "trai": trai,
-        "phai": phai,
+        "front": front,
+        "back": back,
+        "left": left,
+        "right": right,
     }
 
     results = {}
@@ -417,36 +418,38 @@ async def preprocess_session(session_id: str):
             continue
 
         try:
-            res_khach = process_and_detect(
+            res_customer = await run_in_threadpool(
+                process_and_detect,
                 raw_path,
-                label=f"khach_{view}",
+                label=f"customer_{view}",
                 output_dir=session_dir,
             )
-            ignore_pct = round(float(res_khach.get("ignore_ratio", 0.0)) * 100, 2)
+            ignore_pct = round(float(res_customer.get("ignore_ratio", 0.0)) * 100, 2)
 
             ref_path = os.path.join(GHOST_IMAGES_DIR, str(product_id), f"{view}.jpg")
-            goc_processed_url = None
+            ref_processed_url = None
             if os.path.exists(ref_path):
                 try:
-                    process_and_detect(
+                    await run_in_threadpool(
+                        process_and_detect,
                         ref_path,
-                        label=f"goc_{view}",
+                        label=f"ref_{view}",
                         output_dir=session_dir,
                     )
-                    goc_processed_url = f"/uploads/{session_id}/goc_{view}_processed.png"
-                except Exception as e_goc:
-                    print(f"[WARN] Không thể xử lý ảnh gốc {view}: {e_goc}")
+                    ref_processed_url = f"/uploads/{session_id}/ref_{view}_processed.png"
+                except Exception as e_ref:
+                    print(f"[WARN] Không thể xử lý ảnh gốc {view}: {e_ref}")
 
             results[view] = {
                 "status": "ok",
                 "ignore_ratio": ignore_pct,
-                "should_reshoot": bool(res_khach.get("should_reshoot", False)),
-                "processed_url": f"/uploads/{session_id}/khach_{view}_processed.png",
-                "specular_mask_url": f"/uploads/{session_id}/khach_{view}_specular_mask.png",
-                "saturated_mask_url": f"/uploads/{session_id}/khach_{view}_saturated_mask.png",
-                "ignore_mask_url": f"/uploads/{session_id}/khach_{view}_ignore_mask.png",
-                "overlay_contour_url": f"/uploads/{session_id}/khach_{view}_overlay_contour.png",
-                "goc_processed_url": goc_processed_url,
+                "should_reshoot": bool(res_customer.get("should_reshoot", False)),
+                "processed_url": f"/uploads/{session_id}/customer_{view}_processed.png",
+                "specular_mask_url": f"/uploads/{session_id}/customer_{view}_specular_mask.png",
+                "saturated_mask_url": f"/uploads/{session_id}/customer_{view}_saturated_mask.png",
+                "ignore_mask_url": f"/uploads/{session_id}/customer_{view}_ignore_mask.png",
+                "overlay_contour_url": f"/uploads/{session_id}/customer_{view}_overlay_contour.png",
+                "ref_processed_url": ref_processed_url,
             }
         except Exception as e:
             print(f"[ERROR] Preprocessing error for {view}: {e}")
@@ -486,9 +489,8 @@ async def detect_damage_session(session_id: str):
         product_id = session.get("product_id", "B1") if session else "B1"
 
         for view in VIEWS:
-            r_path = os.path.join(session_dir, f"khach_{view}_processed.png")
-            if not os.path.exists(r_path):
-                r_path = os.path.join(session_dir, f"{view}.jpg")
+            # Always pass original captured image to ReferencePipeline (expects raw or 1024x1024 white-bg)
+            r_path = os.path.join(session_dir, f"{view}.jpg")
             if not os.path.exists(r_path):
                 continue
 
@@ -498,7 +500,8 @@ async def detect_damage_session(session_id: str):
                 continue
 
             try:
-                report = pipeline.inspect_return(
+                report = await run_in_threadpool(
+                    pipeline.inspect_return,
                     return_img_path=r_path,
                     product_id=profile_id,
                     output_dir=session_dir
@@ -517,6 +520,7 @@ async def detect_damage_session(session_id: str):
                     "severity": report.get("severity", "Nguyên vẹn"),
                     "result_image_url": res_img_url,
                     "side_by_side_url": res_img_url,
+                    "vase_bbox": report.get("vase_bbox"),
                     "defects": report.get("defects", []),
                 }
             except Exception as e:
@@ -526,6 +530,8 @@ async def detect_damage_session(session_id: str):
     except Exception as ex_global:
         print(f"[ERROR] Global detect error: {ex_global}")
         return JSONResponse({"status": "error", "message": str(ex_global)}, status_code=500)
+
+    dedup_summary = deduplicate_cross_view_defects(results)
 
     # Lưu metadata detect
     detect_meta_path = os.path.join(session_dir, "detect_meta.json")
@@ -539,6 +545,7 @@ async def detect_damage_session(session_id: str):
         "status": "ok",
         "session_id": session_id,
         "results": results,
+        "deduplication": dedup_summary,
     }
 
 

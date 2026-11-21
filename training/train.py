@@ -185,6 +185,9 @@ def train_pipeline(
     print("-" * 65)
 
     best_val_acc = 0.0
+    best_val_loss = float("inf")
+    patience = 6
+    no_improve = 0
 
     for epoch in range(1, epochs + 1):
         # 1. Huấn luyện (Train)
@@ -245,7 +248,16 @@ def train_pipeline(
 
         if val_acc > best_val_acc:
             best_val_acc = val_acc
+
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            no_improve = 0
             model.save_weights(output_model_path)
+        else:
+            no_improve += 1
+            if no_improve >= patience:
+                print(f"[EARLY STOP] Dừng sớm tại epoch {epoch} (Val Loss tốt nhất: {best_val_loss:.4f})")
+                break
 
     elapsed_time = time.time() - start_time
     print("-" * 65)

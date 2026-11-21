@@ -16,7 +16,7 @@ from PIL import Image
 from torchvision import transforms
 from typing import Optional, Dict, Any
 
-from core.preprocessor import clean_rembg_image
+from core.preprocessor import clean_rembg_image, detect_specular_mask, detect_saturated_mask, get_rembg_session
 
 DEVICE = torch.device("cpu")
 
@@ -69,19 +69,13 @@ class ReferencePipeline:
         self.backbone = torch.hub.load('facebookresearch/dinov2', 'dinov2_vits14')
         self.backbone.eval().to(self.device)
         
-        # Tải mô hình RemBG BiRefNet phục vụ tiền xử lý tách nền chuẩn xác
-        try:
-            from rembg import new_session
-            self.rembg_session = new_session('birefnet-general')
-            print("[INIT] Đã nạp mô hình tiền xử lý RemBG (BiRefNet SOTA)!")
-        except Exception:
-            try:
-                from rembg import new_session
-                self.rembg_session = new_session('u2net')
-                print("[INIT] Đã nạp mô hình tiền xử lý RemBG (u2net)!")
-            except Exception as e2:
-                print(f"[WARN] Không thể nạp RemBG: {e2}")
-                self.rembg_session = None
+        # Tái sử dụng session RemBG BiRefNet dùng chung (tránh nạp 2 lần tốn ~1GB RAM)
+        rembg_sess = get_rembg_session()
+        self.rembg_session = rembg_sess if rembg_sess else None
+        if self.rembg_session is not None:
+            print("[INIT] Đã nạp mô hình tiền xử lý RemBG (Shared BiRefNet/u2net)!")
+        else:
+            print("[WARN] Không thể nạp RemBG session.")
         
         self.transform = transforms.Compose([
             transforms.ToTensor(),
@@ -244,65 +238,96 @@ class ReferencePipeline:
                 
         h_r, w_r = ret_bgr.shape[:2]
         
-        # 1. Căn chỉnh phối cảnh SIFT Homography
+        # 1. Căn chỉnh phối cảnh SIFT Homography (Lowe's Ratio Test)
         sift = cv2.SIFT_create(nfeatures=2500)
         kp1, des1 = sift.detectAndCompute(cv2.cvtColor(ref_bgr, cv2.COLOR_BGR2GRAY), None)
         kp2, des2 = sift.detectAndCompute(cv2.cvtColor(ret_bgr, cv2.COLOR_BGR2GRAY), None)
-        
-        bf = cv2.BFMatcher(cv2.NORM_L2, crossCheck=True)
-        matches = sorted(bf.match(des1, des2), key=lambda x: x.distance)
-        src_pts = np.float32([kp1[m.queryIdx].pt for m in matches]).reshape(-1, 1, 2)
-        dst_pts = np.float32([kp2[m.trainIdx].pt for m in matches]).reshape(-1, 1, 2)
-        if len(matches) >= 4:
+
+        good_matches = []
+        if des1 is not None and des2 is not None and len(des1) >= 2 and len(des2) >= 2:
+            bf = cv2.BFMatcher(cv2.NORM_L2)
+            knn = bf.knnMatch(des1, des2, k=2)
+            for pair in knn:
+                if len(pair) == 2 and pair[0].distance < 0.75 * pair[1].distance:
+                    good_matches.append(pair[0])
+
+        H = None
+        if len(good_matches) >= 8:
+            src_pts = np.float32([kp1[m.queryIdx].pt for m in good_matches]).reshape(-1, 1, 2)
+            dst_pts = np.float32([kp2[m.trainIdx].pt for m in good_matches]).reshape(-1, 1, 2)
             H, _ = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
-        else:
-            H = None
         if H is None:
             H = np.eye(3, dtype=np.float32)
-        
+
         ref_warped = cv2.warpPerspective(ref_bgr, H, (w_r, h_r))
         ref_fg_warped = cv2.warpPerspective(ref_fg, H, (w_r, h_r), flags=cv2.INTER_NEAREST)
-        
-        # 2. Tiền xử lý mask thân bình
+        ref_edge_warped = cv2.warpPerspective(ref_edge_tol, H, (w_r, h_r), flags=cv2.INTER_NEAREST)
+
+        # 2. Tiền xử lý mask thân bình & loại trừ vùng lóa sáng gắt + đế gỗ tối màu ở đáy
         ret_fg = self.extract_vase_mask(ret_bgr)
         common_vase = cv2.bitwise_and(ret_fg, ref_fg_warped)
-        valid_inspect_mask = cv2.erode(common_vase, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (11, 11))) > 0
+        valid_inspect_mask = cv2.erode(common_vase, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15, 15))) > 0
+
+        # Chỉ loại trừ đốm lóa specular thật sự (không cắt nhầm men trắng sáng bình thường)
+        glare_spec = detect_specular_mask(ret_bgr, ret_fg)
+        if np.any(glare_spec > 0):
+            glare_dilated = cv2.dilate(glare_spec, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)))
+            valid_inspect_mask = valid_inspect_mask & (glare_dilated == 0)
+
+        # Loại trừ vùng đế gỗ nâu/tối nếu dính vào 20% dưới cùng của mask
+        ys_v, _ = np.where(ret_fg > 0)
+        if len(ys_v) > 0:
+            y_bot_cut = int(ys_v.min() + 0.80 * (ys_v.max() - ys_v.min()))
+            hsv_ret = cv2.cvtColor(ret_bgr, cv2.COLOR_BGR2HSV)
+            wood_mask = (
+                (hsv_ret[..., 1] > 35) &
+                (hsv_ret[..., 2] < 120)
+            )
+            wood_mask[:y_bot_cut, :] = False
+            valid_inspect_mask = valid_inspect_mask & (~wood_mask)
         
-        # 3. Chuẩn hóa phơi sáng & cân bằng màu CIELab
+        # 3. Chuẩn hóa phơi sáng & cân bằng màu CIELab (toàn cục + bù gradient sáng cục bộ)
         p_lab = cv2.cvtColor(ref_warped, cv2.COLOR_BGR2LAB).astype(np.float32)
         r_lab = cv2.cvtColor(ret_bgr, cv2.COLOR_BGR2LAB).astype(np.float32)
-        
-        off_L = np.median(r_lab[valid_inspect_mask, 0]) - np.median(p_lab[valid_inspect_mask, 0])
-        off_a = np.median(r_lab[valid_inspect_mask, 1]) - np.median(p_lab[valid_inspect_mask, 1])
-        off_b = np.median(r_lab[valid_inspect_mask, 2]) - np.median(p_lab[valid_inspect_mask, 2])
-        r_lab[..., 0] -= off_L
-        r_lab[..., 1] -= off_a
-        r_lab[..., 2] -= off_b
-        
-        # 4. Tìm kiếm dung sai vi mô Local Search 5x5 (Triệt tiêu sai số hoa văn gốc)
-        k_size = 5
-        pad = k_size // 2
+
+        if np.any(valid_inspect_mask):
+            off_L = np.median(r_lab[valid_inspect_mask, 0]) - np.median(p_lab[valid_inspect_mask, 0])
+            off_a = np.median(r_lab[valid_inspect_mask, 1]) - np.median(p_lab[valid_inspect_mask, 1])
+            off_b = np.median(r_lab[valid_inspect_mask, 2]) - np.median(p_lab[valid_inspect_mask, 2])
+            r_lab[..., 0] -= off_L
+            r_lab[..., 1] -= off_a
+            r_lab[..., 2] -= off_b
+
+            # Bù trừ độ sáng không đều trên thân bình cong (chiếu sáng lệch / đèn trong bình)
+            diff_L_raw = np.where(valid_inspect_mask, r_lab[..., 0] - p_lab[..., 0], 0.0).astype(np.float32)
+            smooth_L_grad = cv2.GaussianBlur(diff_L_raw, (81, 81), 0)
+            r_lab[..., 0] -= np.clip(smooth_L_grad, -40.0, 40.0)
+
+        # 4. Tìm kiếm dung sai vi mô Local Search bán kính ±6px (Triệt tiêu sai số hoa văn gốc)
+        offsets = [-6, -3, 0, 3, 6]
+        pad = 6
         p_padded = cv2.copyMakeBorder(p_lab, pad, pad, pad, pad, cv2.BORDER_REFLECT)
         min_dE_full = np.full((h_r, w_r), 999.0, dtype=np.float32)
-        
-        for dy in range(k_size):
-            for dx in range(k_size):
-                shifted = p_padded[dy:dy+h_r, dx:dx+w_r]
+
+        for dy in offsets:
+            for dx in offsets:
+                shifted = p_padded[pad + dy:pad + dy + h_r, pad + dx:pad + dx + w_r]
                 dL = r_lab[..., 0] - shifted[..., 0]
                 da = r_lab[..., 1] - shifted[..., 1]
                 db = r_lab[..., 2] - shifted[..., 2]
                 dist = np.sqrt(dL**2 + da**2 + db**2)
                 min_dE_full = np.minimum(min_dE_full, dist)
-                
+
         min_dE_full[~valid_inspect_mask] = 0.0
-        
-        # 5. Cổng kiểm chứng đối chiếu vi sai kết hợp Local Tolerance Search
-        confirmed_score = np.clip((min_dE_full - 25.0) / 25.0, 0.0, 1.0)
+
+        # 5. Cổng kiểm chứng đối chiếu vi sai kết hợp edge tolerance trên nét vẽ gốc
+        base_thresh = np.where(ref_edge_warped > 0, 34.0, 25.0).astype(np.float32)
+        confirmed_score = np.clip((min_dE_full - base_thresh) / 25.0, 0.0, 1.0)
         confirmed_score[~valid_inspect_mask] = 0.0
-        
+
         binary_defects = (confirmed_score > 0.15).astype(np.uint8) * 255
         binary_defects = cv2.morphologyEx(binary_defects, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3)))
-        
+
         # 5b. Trích xuất đặc trưng vi sai DINOv2 phục vụ quét nơ-ron toàn diện (Neural Scan)
         delta_f = None
         neural_defect_prob = None
@@ -318,6 +343,11 @@ class ReferencePipeline:
                     f_ret = f_ret / f_ret.norm(dim=-1, keepdim=True)
                     f_ref = f_ref / f_ref.norm(dim=-1, keepdim=True)
                     delta_f = torch.abs(f_ret - f_ref)  # (1024, 384)
+                    logits_grid = self.defect_head(delta_f.to(self.device))
+                    probs_grid = torch.softmax(logits_grid, dim=-1)  # (1024, 4)
+                    defect_prob_grid = (1.0 - probs_grid[:, 0]).reshape(32, 32).cpu().numpy()
+                    neural_defect_prob = cv2.resize(defect_prob_grid, (w_r, h_r), interpolation=cv2.INTER_LINEAR)
+                    neural_defect_prob[~valid_inspect_mask] = 0.0
             except Exception as e_dino:
                 print(f"[WARN] Lỗi trích xuất DINOv2 vi sai: {e_dino}")
                 delta_f = None
@@ -442,6 +472,9 @@ class ReferencePipeline:
         img_out_path = os.path.join(output_dir, f"{product_id}_{ret_base}_result.jpg")
         cv2.imwrite(img_out_path, comp_result)
         
+        vase_coords = cv2.findNonZero(ret_fg)
+        vase_bbox = list(cv2.boundingRect(vase_coords)) if vase_coords is not None else [0, 0, w_r, h_r]
+
         report = {
             "product_id": product_id,
             "image_name": os.path.basename(return_img_path),
@@ -450,6 +483,7 @@ class ReferencePipeline:
             "damage_percentage": round(damage_ratio, 3),
             "severity": "Hư hỏng nặng" if len(defect_items) > 5 or damage_ratio > 1.0 else ("Có khuyết tật" if len(defect_items) > 0 else "Nguyên vẹn"),
             "result_image": img_out_path,
+            "vase_bbox": vase_bbox,
             "defects": defect_items
         }
         
@@ -459,3 +493,87 @@ class ReferencePipeline:
             
         print(f"[INSPECT] Hoàn tất! Phát hiện {len(defect_items)} khuyết tật. Ảnh: {img_out_path}")
         return report
+
+
+def deduplicate_cross_view_defects(view_results: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    Khử trùng lặp khuyết tật đa góc 3D (Cross-View Deduplication) cho 4 mặt xoay 360°.
+    Hai vết lỗi ở hai mặt liền kề được gộp thành 1 nếu nằm ở vùng giáp ranh mép
+    (x_norm >= 0.80 và x_norm <= 0.20), cùng độ cao (|dy| <= 0.03),
+    cùng kích thước (|dh| <= 0.02), và cùng loại (category).
+    """
+    ordered_views = ["front", "right", "back", "left"]
+    adjacent_pairs = [
+        ("front", "right"),
+        ("right", "back"),
+        ("back", "left"),
+        ("left", "front"),
+    ]
+
+    def _norm_box(defect_bbox, vase_bbox):
+        dx, dy, dw, dh = defect_bbox
+        vx, vy, vw, vh = vase_bbox
+        vw = max(1, vw)
+        vh = max(1, vh)
+        return (
+            (dx - vx) / vw,
+            (dy - vy) / vh,
+            dw / vw,
+            dh / vh,
+        )
+
+    removed = set()  # (view, defect_idx)
+    merged_pairs = []
+
+    for v_a, v_b in adjacent_pairs:
+        rep_a = view_results.get(v_a)
+        rep_b = view_results.get(v_b)
+        if not rep_a or not rep_b or rep_a.get("status") != "ok" or rep_b.get("status") != "ok":
+            continue
+        vbox_a = rep_a.get("vase_bbox") or [0, 0, 1024, 1024]
+        vbox_b = rep_b.get("vase_bbox") or [0, 0, 1024, 1024]
+        defs_a = rep_a.get("defects", [])
+        defs_b = rep_b.get("defects", [])
+
+        for i, da in enumerate(defs_a):
+            if (v_a, i) in removed:
+                continue
+            xa, ya, wa, ha = _norm_box(da["bbox"], vbox_a)
+            if xa < 0.80:
+                continue
+            for j, db in enumerate(defs_b):
+                if (v_b, j) in removed:
+                    continue
+                if da.get("category") != db.get("category"):
+                    continue
+                xb, yb, wb, hb = _norm_box(db["bbox"], vbox_b)
+                if xb > 0.20:
+                    continue
+                if abs(ya - yb) <= 0.03 and abs(ha - hb) <= 0.02:
+                    # Giữ vết lỗi có diện tích quan sát lớn hơn
+                    if da.get("area_pixels", 0) >= db.get("area_pixels", 0):
+                        removed.add((v_b, j))
+                        merged_pairs.append({"kept": f"{v_a}#{i}", "dropped": f"{v_b}#{j}"})
+                    else:
+                        removed.add((v_a, i))
+                        merged_pairs.append({"kept": f"{v_b}#{j}", "dropped": f"{v_a}#{i}"})
+                        break
+
+    unique_count = 0
+    for v in ordered_views:
+        rep = view_results.get(v)
+        if not rep or rep.get("status") != "ok":
+            continue
+        kept = []
+        for idx, d in enumerate(rep.get("defects", [])):
+            is_dup = (v, idx) in removed
+            d["is_cross_view_duplicate"] = is_dup
+            if not is_dup:
+                kept.append(d)
+                unique_count += 1
+        rep["unique_defect_count"] = len(kept)
+
+    return {
+        "total_unique_defects": unique_count,
+        "deduplicated_pairs": merged_pairs,
+    }

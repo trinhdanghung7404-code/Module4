@@ -274,10 +274,10 @@ const PRODUCT_ID = "{{ product_id }}";
 const RETURN_ID = {{ return_id | tojson if return_id is defined and return_id is not none else 'null' }};
 const CLOUDINARY_CLOUD_NAME = "{{ cloudinary_cloud_name or '' }}";
 const VIEW_CLOUDINARY_MAP = {
-    "truoc": "front",
-    "sau": "back",
-    "trai": "left",
-    "phai": "right"
+    "front": "front",
+    "back": "back",
+    "left": "left",
+    "right": "right"
 };
 window.RETURN_ID = RETURN_ID;
 window.SESSION_ID = SESSION_ID;

@@ -42,12 +42,12 @@ CLOUDINARY_API_SECRET = os.environ.get("CLOUDINARY_API_SECRET", "YZxcLiUx5_RqDHE
 SESSION_EXPIRE_MINUTES = 30
 
 # --- Standard Inspection Views ---
-VIEWS = ["truoc", "sau", "trai", "phai"]
+VIEWS = ["front", "back", "left", "right"]
 VIEW_LABELS = {
-    "truoc": "Mặt Trước",
-    "sau": "Mặt Sau",
-    "trai": "Mặt Trái",
-    "phai": "Mặt Phải",
+    "front": "Front",
+    "back": "Back",
+    "left": "Left",
+    "right": "Right",
 }
 
 # --- Client-Side Auto-Capture Parameters ---

@@ -219,33 +219,33 @@
                 <input type="text" id="upload-product-id" placeholder="Ví dụ: 1, 2, BinhHoa01..." value="1">
 
                 <div class="upload-grid">
-                    <!-- Trước -->
-                    <div class="upload-item" onclick="document.getElementById('file-truoc').click()">
-                        <div class="upload-title">🔵 Mặt Trước</div>
-                        <div class="upload-hint" id="hint-truoc">Bấm chọn ảnh...</div>
-                        <img class="upload-preview" id="prev-truoc">
-                        <input type="file" id="file-truoc" accept="image/*" style="display:none" onchange="previewFile('truoc')">
+                    <!-- Front -->
+                    <div class="upload-item" onclick="document.getElementById('file-front').click()">
+                        <div class="upload-title">🔵 Front</div>
+                        <div class="upload-hint" id="hint-front">Bấm chọn ảnh...</div>
+                        <img class="upload-preview" id="prev-front">
+                        <input type="file" id="file-front" accept="image/*" style="display:none" onchange="previewFile('front')">
                     </div>
-                    <!-- Sau -->
-                    <div class="upload-item" onclick="document.getElementById('file-sau').click()">
-                        <div class="upload-title">🔵 Mặt Sau</div>
-                        <div class="upload-hint" id="hint-sau">Bấm chọn ảnh...</div>
-                        <img class="upload-preview" id="prev-sau">
-                        <input type="file" id="file-sau" accept="image/*" style="display:none" onchange="previewFile('sau')">
+                    <!-- Back -->
+                    <div class="upload-item" onclick="document.getElementById('file-back').click()">
+                        <div class="upload-title">🔵 Back</div>
+                        <div class="upload-hint" id="hint-back">Bấm chọn ảnh...</div>
+                        <img class="upload-preview" id="prev-back">
+                        <input type="file" id="file-back" accept="image/*" style="display:none" onchange="previewFile('back')">
                     </div>
-                    <!-- Trái -->
-                    <div class="upload-item" onclick="document.getElementById('file-trai').click()">
-                        <div class="upload-title">🔵 Mặt Trái</div>
-                        <div class="upload-hint" id="hint-trai">Bấm chọn ảnh...</div>
-                        <img class="upload-preview" id="prev-trai">
-                        <input type="file" id="file-trai" accept="image/*" style="display:none" onchange="previewFile('trai')">
+                    <!-- Left -->
+                    <div class="upload-item" onclick="document.getElementById('file-left').click()">
+                        <div class="upload-title">🔵 Left</div>
+                        <div class="upload-hint" id="hint-left">Bấm chọn ảnh...</div>
+                        <img class="upload-preview" id="prev-left">
+                        <input type="file" id="file-left" accept="image/*" style="display:none" onchange="previewFile('left')">
                     </div>
-                    <!-- Phải -->
-                    <div class="upload-item" onclick="document.getElementById('file-phai').click()">
-                        <div class="upload-title">🔵 Mặt Phải</div>
-                        <div class="upload-hint" id="hint-phai">Bấm chọn ảnh...</div>
-                        <img class="upload-preview" id="prev-phai">
-                        <input type="file" id="file-phai" accept="image/*" style="display:none" onchange="previewFile('phai')">
+                    <!-- Right -->
+                    <div class="upload-item" onclick="document.getElementById('file-right').click()">
+                        <div class="upload-title">🔵 Right</div>
+                        <div class="upload-hint" id="hint-right">Bấm chọn ảnh...</div>
+                        <img class="upload-preview" id="prev-right">
+                        <input type="file" id="file-right" accept="image/*" style="display:none" onchange="previewFile('right')">
                     </div>
                 </div>
 
@@ -353,7 +353,7 @@
                 return;
             }
 
-            const views = ['truoc', 'sau', 'trai', 'phai'];
+            const views = ['front', 'back', 'left', 'right'];
             const formData = new FormData();
             formData.append('product_id', productId);
 
@@ -393,7 +393,7 @@
                     statusBox.innerHTML = `✅ Đã xử lý thành công <b>${data.processed_count}</b> góc sản phẩm cho Product ID: <b>${data.product_id}</b>`;
                     ghostGrid.innerHTML = '';
 
-                    const labels = {truoc:'Trước', sau:'Sau', trai:'Trái', phai:'Phải'};
+                    const labels = {front:'Front', back:'Back', left:'Left', right:'Right'};
                     for (const [view, info] of Object.entries(data.results)) {
                         if (info.status === 'ok') {
                             const card = document.createElement('div');
@@ -486,7 +486,7 @@
         }
 
         function renderViews(views) {
-            const labels = {truoc:'Mặt Trước', sau:'Mặt Sau', trai:'Mặt Trái', phai:'Mặt Phải'};
+            const labels = {front:'Front', back:'Back', left:'Left', right:'Right'};
             const list = document.getElementById('views-list');
             list.innerHTML = '';
 

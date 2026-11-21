@@ -168,6 +168,31 @@ def extract_features_dataset(
                 all_features.append(delta_f[neg_idx])
                 all_labels.append(0)  # Nhãn 0: Normal
 
+            # 2b. Hard-Negative Mining: Dịch chuyển nhẹ (±5px, ±1.5°) + đổi sáng trên ảnh sạch
+            # Giúp CD-MLP học rằng hoa văn bị lệch nhẹ do góc chụp / độ cong 3D là Normal (0)
+            dx = random.choice([-5, -4, -3, 3, 4, 5])
+            dy = random.choice([-5, -4, -3, 3, 4, 5])
+            ang = random.uniform(-1.5, 1.5)
+            M = cv2.getRotationMatrix2D((224, 224), ang, 1.0)
+            M[0, 2] += dx
+            M[1, 2] += dy
+            ref_jitter = cv2.warpAffine(ref_rgb, M, (448, 448), borderValue=(128, 128, 128))
+            bright = random.uniform(0.88, 1.15)
+            ref_jitter = np.clip(ref_jitter.astype(np.float32) * bright, 0, 255).astype(np.uint8)
+            t_jit = transform(ref_jitter).unsqueeze(0).to(device)
+            with torch.no_grad():
+                f_jit = backbone.get_intermediate_layers(t_jit, n=1)[0].squeeze(0)
+                f_jit = f_jit / f_jit.norm(dim=-1, keepdim=True)
+                delta_f_jit = torch.abs(f_jit - f_ref).cpu()
+
+            # Ưu tiên lấy mẫu tại các patch có độ sai khác cao nhất (nét vẽ bị lệch)
+            cand_norms = [(idx, float(delta_f_jit[idx].norm().item())) for idx in candidate_normals]
+            cand_norms.sort(key=lambda x: x[1], reverse=True)
+            hard_pool = [idx for idx, _ in cand_norms[:max(6, len(cand_norms) // 4)]]
+            for h_idx in random.sample(hard_pool, min(2, len(hard_pool))):
+                all_features.append(delta_f_jit[h_idx])
+                all_labels.append(0)
+
         if (i + 1) % 50 == 0 or (i + 1) == len(records):
             print(f"  -> Đã xử lý {i + 1}/{len(records)} ảnh... (Tổng vector: {len(all_features)})")
 

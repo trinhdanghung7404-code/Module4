@@ -211,10 +211,10 @@ def build_synthetic_dataset(
     ]
 
     view_specs = [
-        ("01_front", "truoc_nb.png"),
-        ("02_back", "sau_nb.png"),
-        ("03_left", "trai_nb.png"),
-        ("04_right", "phai_nb.png")
+        ("01_front", "front_nb.png"),
+        ("02_back", "back_nb.png"),
+        ("03_left", "left_nb.png"),
+        ("04_right", "right_nb.png")
     ]
 
     print(f"[GEN] Bắt đầu sinh dữ liệu khuyết tật từ ảnh tách nền (_nb.png) tại: {ghost_overlays_dir}")
