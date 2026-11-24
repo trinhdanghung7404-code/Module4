@@ -12,7 +12,7 @@ import shutil
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE_DIR, "data")
 PROFILES_DIR = os.path.join(DATA_DIR, "profiles")
-REFERENCE_IMAGES_DIR = os.path.join(DATA_DIR, "reference_images")
+REFERENCE_IMAGES_DIR = os.path.join(DATA_DIR, "references")
 GHOST_IMAGES_DIR = os.path.join(DATA_DIR, "ghost_overlays")
 MODELS_DIR = os.path.join(BASE_DIR, "models")
 TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
@@ -41,13 +41,25 @@ CLOUDINARY_API_SECRET = os.environ.get("CLOUDINARY_API_SECRET", "YZxcLiUx5_RqDHE
 # --- Session Management ---
 SESSION_EXPIRE_MINUTES = 30
 
-# --- Standard Inspection Views ---
-VIEWS = ["truoc", "sau", "trai", "phai"]
+# --- Standard Inspection Views (100% English) ---
+VIEWS = ["front", "back", "left", "right"]
 VIEW_LABELS = {
-    "truoc": "Mặt Trước",
-    "sau": "Mặt Sau",
-    "trai": "Mặt Trái",
-    "phai": "Mặt Phải",
+    "front": "Front View",
+    "back": "Back View",
+    "left": "Left View",
+    "right": "Right View",
+}
+
+# Legacy mapping for backwards-compatibility with old uploads
+LEGACY_VIEW_MAP = {
+    "truoc": "front",
+    "sau": "back",
+    "trai": "left",
+    "phai": "right",
+    "front": "front",
+    "back": "back",
+    "left": "left",
+    "right": "right",
 }
 
 # --- Client-Side Auto-Capture Parameters ---

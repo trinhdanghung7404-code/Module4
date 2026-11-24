@@ -1,665 +1,816 @@
 <!DOCTYPE html>
-<html lang="vi">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kết Quả Đối Chiếu Thực Tế — {{ product_id }}</title>
+    <title>Forensic AI Inspection Report — {{ product_id }}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,400&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --bg-page: #FAF6F0;
+            --bg-card: #FFFFFF;
+            --bg-subtle: #F4EFEA;
+            --border-subtle: #E8DFD5;
+            --border-hover: #D4C5B5;
+            --text-heading: #2B231D;
+            --text-body: #5C5046;
+            --text-muted: #8C7E73;
+            --brand-terracotta: #B85D34;
+            --brand-terracotta-hover: #9E4C27;
+            --brand-terracotta-soft: rgba(184, 93, 52, 0.08);
+            --brand-sand: #C89B6D;
+            --status-success: #3B6B35;
+            --status-success-bg: rgba(59, 107, 53, 0.08);
+            --status-success-border: rgba(59, 107, 53, 0.25);
+            --status-danger: #B93822;
+            --status-danger-bg: rgba(185, 56, 34, 0.08);
+            --status-danger-border: rgba(185, 56, 34, 0.25);
+            --status-amber: #B47B19;
+            --status-amber-bg: rgba(180, 123, 25, 0.08);
+            --status-amber-border: rgba(180, 123, 25, 0.25);
+            --shadow-soft: 0 4px 20px -2px rgba(43, 35, 29, 0.05);
+            --shadow-card: 0 6px 24px -4px rgba(43, 35, 29, 0.07);
+        }
+
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
-            font-family: 'Segoe UI', sans-serif;
-            background: #0f172a;
-            color: #e2e8f0;
+            font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: var(--bg-page);
+            color: var(--text-body);
             min-height: 100vh;
-            padding: 30px 20px;
+            padding: 32px 20px 64px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
         }
 
         .header {
             text-align: center;
             margin-bottom: 28px;
         }
-        .header h1 { font-size: 26px; font-weight: 700; color: #f8fafc; }
+        .header-eyebrow {
+            font-size: 11px;
+            letter-spacing: 0.16em;
+            text-transform: uppercase;
+            font-weight: 700;
+            color: var(--brand-terracotta);
+            margin-bottom: 6px;
+        }
+        .header h1 {
+            font-family: 'Playfair Display', Georgia, serif;
+            font-size: 28px;
+            font-weight: 600;
+            color: var(--text-heading);
+            letter-spacing: -0.01em;
+            margin-bottom: 6px;
+        }
         .header .sub {
-            color: #94a3b8;
-            font-size: 14px;
-            margin-top: 6px;
+            color: var(--text-muted);
+            font-size: 13px;
         }
         .header .session-id {
             display: inline-block;
-            background: #1e293b;
-            border: 1px solid #334155;
-            border-radius: 8px;
-            padding: 4px 12px;
-            font-size: 13px;
-            color: #38bdf8;
-            margin-top: 8px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 999px;
+            padding: 4px 14px;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-heading);
+            margin-top: 10px;
             font-family: monospace;
         }
 
-        /* Overall score card */
-        .overall-card {
-            background: #1e293b;
-            border: 1px solid #334155;
-            border-radius: 16px;
-            padding: 24px 28px;
-            margin-bottom: 28px;
+        /* Banner */
+        .processing-banner {
+            background-color: var(--bg-card);
+            border: 1px solid var(--brand-sand);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            margin-bottom: 24px;
+            box-shadow: var(--shadow-soft);
+        }
+        .processing-title {
+            font-family: 'Playfair Display', Georgia, serif;
+            font-size: 17px;
+            font-weight: 600;
+            color: var(--text-heading);
+            margin-bottom: 6px;
+        }
+        .processing-desc {
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
+        /* Action Toolbar */
+        .action-bar {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 12px;
+            padding: 18px 24px;
+            margin-bottom: 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 16px;
+            box-shadow: var(--shadow-soft);
+        }
+        .action-info {
+            font-size: 13px;
+            color: var(--text-body);
+            line-height: 1.5;
+            max-width: 580px;
+        }
+        .action-info b {
+            color: var(--text-heading);
+        }
+
+        .btn-action-primary {
+            background-color: var(--brand-terracotta);
+            color: #FFFFFF;
+            border: none;
+            border-radius: 8px;
+            padding: 10px 18px;
+            font-size: 13px;
+            font-weight: 600;
+            font-family: inherit;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .btn-action-primary:hover {
+            background-color: var(--brand-terracotta-hover);
+        }
+
+        .btn-action-secondary {
+            background-color: var(--bg-card);
+            color: var(--text-heading);
+            border: 1px solid var(--border-subtle);
+            border-radius: 8px;
+            padding: 10px 18px;
+            font-size: 13px;
+            font-weight: 600;
+            font-family: inherit;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-action-secondary:hover {
+            border-color: var(--brand-terracotta);
+            color: var(--brand-terracotta);
+        }
+
+        /* Tester Toolbar */
+        .tester-toolbar {
+            background-color: var(--bg-subtle);
+            border: 1px solid var(--border-subtle);
+            border-radius: 12px;
+            padding: 16px 20px;
+            margin-bottom: 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 14px;
+        }
+        .tester-title {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--text-heading);
             display: flex;
             align-items: center;
-            gap: 24px;
+            gap: 10px;
         }
-        .overall-label { font-size: 15px; color: #94a3b8; min-width: 140px; }
-        .overall-score {
-            font-size: 42px;
-            font-weight: 800;
-            min-width: 120px;
+        .tester-sub {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 3px;
         }
-        .overall-score.high   { color: #22c55e; }
-        .overall-score.medium { color: #f59e0b; }
-        .overall-score.low    { color: #ef4444; }
-        .overall-bar-wrap {
-            flex: 1;
-            background: #0f172a;
-            border-radius: 10px;
-            height: 16px;
-            overflow: hidden;
+        .btn-sim {
+            background-color: #FFFFFF;
+            border: 1px solid var(--border-subtle);
+            color: var(--text-heading);
+            padding: 7px 13px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            font-family: inherit;
+            cursor: pointer;
+            transition: all 0.15s;
         }
-        .overall-bar {
-            height: 100%;
-            border-radius: 10px;
-            transition: width 1.2s cubic-bezier(0.4, 0, 0.2, 1);
+        .btn-sim:hover {
+            border-color: var(--brand-terracotta);
+            color: var(--brand-terracotta);
         }
-        .overall-bar.high   { background: linear-gradient(90deg, #16a34a, #22c55e); }
-        .overall-bar.medium { background: linear-gradient(90deg, #d97706, #f59e0b); }
-        .overall-bar.low    { background: linear-gradient(90deg, #dc2626, #ef4444); }
+        .btn-sim.reset {
+            background-color: var(--brand-terracotta-soft);
+            border-color: var(--brand-terracotta);
+            color: var(--brand-terracotta);
+        }
 
-        /* Pairs grid */
-        .pairs-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 24px;
+        /* Executive Verdict Card */
+        .executive-card {
+            border-radius: 14px;
+            padding: 24px 28px;
+            margin-bottom: 28px;
+            background-color: var(--bg-card);
+            box-shadow: var(--shadow-card);
+            border: 1px solid var(--border-subtle);
         }
-        @media (max-width: 900px) {
-            .pairs-grid { grid-template-columns: 1fr; }
-            .overall-card { flex-direction: column; align-items: flex-start; gap: 12px; }
+        .executive-card.intact {
+            border-left: 6px solid var(--status-success);
+        }
+        .executive-card.defective {
+            border-left: 6px solid var(--status-danger);
+        }
+        .executive-card.pending {
+            border-left: 6px solid var(--status-amber);
+        }
+
+        .executive-title {
+            font-family: 'Playfair Display', Georgia, serif;
+            font-size: 20px;
+            font-weight: 600;
+            color: var(--text-heading);
+            margin-bottom: 6px;
+        }
+        .executive-desc {
+            font-size: 14px;
+            color: var(--text-body);
+            line-height: 1.6;
+            margin-bottom: 14px;
+        }
+        .executive-tags {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .tag {
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            padding: 4px 10px;
+            border-radius: 999px;
+            white-space: nowrap;
+        }
+        .tag.success {
+            background: var(--status-success-bg);
+            color: var(--status-success);
+            border: 1px solid var(--status-success-border);
+        }
+        .tag.danger {
+            background: var(--status-danger-bg);
+            color: var(--status-danger);
+            border: 1px solid var(--status-danger-border);
+        }
+        .tag.warning {
+            background: var(--status-amber-bg);
+            color: var(--status-amber);
+            border: 1px solid var(--status-amber-border);
+        }
+        .tag.info {
+            background: var(--bg-subtle);
+            color: var(--text-muted);
+            border: 1px solid var(--border-subtle);
+        }
+
+        /* Pairs Grid */
+        .pairs-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 28px;
+            margin-bottom: 32px;
         }
 
         .pair-card {
-            background: #1e293b;
-            border: 1px solid #334155;
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-subtle);
             border-radius: 14px;
-            overflow: hidden;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            padding: 24px;
+            box-shadow: var(--shadow-soft);
         }
+
         .pair-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 14px 18px;
-            background: #192437;
-            border-bottom: 1px solid #334155;
+            border-bottom: 1px solid var(--border-subtle);
+            padding-bottom: 14px;
+            margin-bottom: 18px;
         }
-        .pair-title { font-size: 16px; font-weight: 700; color: #f1f5f9; }
-        .badge {
-            font-size: 12px;
+
+        .pair-title {
+            font-family: 'Playfair Display', Georgia, serif;
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--text-heading);
+        }
+
+        .badge-pill {
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 11px;
             font-weight: 700;
-            padding: 4px 12px;
-            border-radius: 20px;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
         }
-        .badge.high   { background: #14532d; color: #4ade80; border: 1px solid #22c55e; }
-        .badge.medium { background: #451a03; color: #fbbf24; border: 1px solid #f59e0b; }
-        .badge.low    { background: #450a0a; color: #f87171; border: 1px solid #ef4444; }
-        .badge.none   { background: #1e293b; color: #64748b; }
+        .badge-pill.high {
+            background: var(--status-success-bg);
+            color: var(--status-success);
+            border: 1px solid var(--status-success-border);
+        }
+        .badge-pill.low {
+            background: var(--status-danger-bg);
+            color: var(--status-danger);
+            border: 1px solid var(--status-danger-border);
+        }
+        .badge-pill.none {
+            background: var(--bg-subtle);
+            color: var(--text-muted);
+            border: 1px solid var(--border-subtle);
+        }
 
         .images-row {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 0;
-            background: #0b1120;
+            gap: 16px;
+            margin-bottom: 20px;
         }
+        @media (max-width: 640px) {
+            .images-row { grid-template-columns: 1fr; }
+        }
+
         .img-cell {
-            padding: 14px 12px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 8px;
-        }
-        .img-cell + .img-cell {
-            border-left: 1px solid #1e293b;
+            background-color: var(--bg-subtle);
+            border: 1px solid var(--border-subtle);
+            border-radius: 10px;
+            padding: 12px;
+            text-align: center;
         }
         .img-cell span {
-            font-size: 12px;
-            color: #94a3b8;
-            font-weight: 600;
-            text-align: center;
+            display: block;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            margin-bottom: 8px;
         }
         .img-cell img {
             width: 100%;
-            height: 220px;
+            height: 280px;
             object-fit: contain;
-            border-radius: 8px;
-            background: #0f172a;
+            background: #FFFFFF;
+            border-radius: 6px;
+            border: 1px solid var(--border-subtle);
         }
         .img-missing {
-            width: 100%;
-            height: 220px;
+            height: 280px;
             display: flex;
             align-items: center;
             justify-content: center;
-            background: #0f172a;
-            border-radius: 8px;
-            color: #475569;
+            color: var(--text-muted);
             font-size: 13px;
         }
 
-        .metrics-row {
-            display: flex;
-            justify-content: space-around;
-            padding: 10px 16px;
-            background: #151f32;
-            border-top: 1px solid #1e293b;
-            font-size: 12px;
-            color: #94a3b8;
-        }
-        .metrics-row b { color: #f1f5f9; }
-
-        .sim-bar-wrap {
-            padding: 14px 18px;
-        }
-        .sim-label-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: baseline;
-            margin-bottom: 6px;
-        }
-        .sim-label-row span { font-size: 13px; color: #94a3b8; }
-        .sim-label-row strong {
-            font-size: 20px;
-            font-weight: 800;
-        }
-        .sim-label-row strong.high   { color: #22c55e; }
-        .sim-label-row strong.medium { color: #f59e0b; }
-        .sim-label-row strong.low    { color: #ef4444; }
-        .sim-label-row strong.none   { color: #475569; }
-        .sim-bar-bg {
-            background: #0f172a;
-            border-radius: 6px;
-            height: 10px;
-            overflow: hidden;
-        }
-        .sim-bar-fill {
-            height: 100%;
-            border-radius: 6px;
-            transition: width 1s ease 0.2s;
-        }
-        .sim-bar-fill.high   { background: linear-gradient(90deg, #16a34a, #4ade80); }
-        .sim-bar-fill.medium { background: linear-gradient(90deg, #b45309, #fbbf24); }
-        .sim-bar-fill.low    { background: linear-gradient(90deg, #b91c1c, #f87171); }
-        .sim-bar-fill.none   { background: #334155; width: 0%; }
-
-        .note {
-            margin-top: 28px;
-            background: #1e293b;
-            border: 1px solid #334155;
-            border-radius: 12px;
-            padding: 18px 24px;
-            font-size: 14px;
-            color: #94a3b8;
-            line-height: 1.7;
-        }
-        .note strong { color: #38bdf8; }
-
-        /* Action Bar for Preprocessing & Detection */
-        .action-bar {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 16px;
-            margin-bottom: 24px;
-            background: #1e293b;
-            padding: 16px 24px;
-            border-radius: 12px;
-            border: 1px solid #334155;
-            flex-wrap: wrap;
-        }
-        .btn-preprocess {
-            background: linear-gradient(135deg, #6366f1, #3b82f6);
-            color: #ffffff;
-            border: none;
-            padding: 12px 24px;
-            font-size: 15px;
-            font-weight: 700;
-            border-radius: 8px;
-            cursor: pointer;
-            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35);
-            transition: all 0.2s ease;
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-        }
-        .btn-preprocess:hover {
-            background: linear-gradient(135deg, #4f46e5, #2563eb);
-            transform: translateY(-1px);
-        }
-        .btn-preprocess:disabled {
-            background: #475569;
-            cursor: not-allowed;
-            transform: none;
-            box-shadow: none;
-        }
-
-        .btn-detect {
-            background: linear-gradient(135deg, #f43f5e, #ea580c);
-            color: #ffffff;
-            border: none;
-            padding: 12px 24px;
-            font-size: 15px;
-            font-weight: 700;
-            border-radius: 8px;
-            cursor: pointer;
-            box-shadow: 0 4px 12px rgba(244, 63, 94, 0.35);
-            transition: all 0.2s ease;
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-        }
-        .btn-detect:hover {
-            background: linear-gradient(135deg, #e11d48, #c2410c);
-            transform: translateY(-1px);
-        }
-        .btn-detect:disabled {
-            background: #475569;
-            cursor: not-allowed;
-            transform: none;
-            box-shadow: none;
-        }
-
-        /* Preprocessing visual section inside pair card */
+        /* Preprocessing section */
         .prep-section {
-            border-top: 1px solid #334155;
-            background: #111a2e;
-            padding: 14px 16px;
+            background-color: var(--bg-subtle);
+            border: 1px solid var(--border-subtle);
+            border-radius: 10px;
+            padding: 18px;
+            margin-bottom: 20px;
         }
         .prep-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 10px;
+            margin-bottom: 12px;
         }
         .prep-title {
             font-size: 13px;
             font-weight: 700;
-            color: #38bdf8;
-            display: flex;
-            align-items: center;
-            gap: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--brand-terracotta);
         }
         .prep-grid {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
-            gap: 8px;
+            gap: 12px;
+        }
+        @media (max-width: 640px) {
+            .prep-grid { grid-template-columns: 1fr; }
         }
         .prep-card {
-            background: #0f172a;
-            border-radius: 6px;
-            padding: 6px;
+            background-color: #FFFFFF;
+            border: 1px solid var(--border-subtle);
+            border-radius: 8px;
+            padding: 8px;
             text-align: center;
-            border: 1px solid #1e293b;
         }
         .prep-card img {
             width: 100%;
-            height: 130px;
+            height: 140px;
             object-fit: contain;
             border-radius: 4px;
-            background: #090d16;
-            cursor: pointer;
+            background: #FAF8F5;
         }
         .prep-card span {
-            font-size: 11px;
-            color: #94a3b8;
-            margin-top: 4px;
             display: block;
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-top: 6px;
+            font-weight: 600;
         }
 
-        /* Detection section inside pair card */
+        /* Detect section */
         .detect-section {
-            border-top: 1px solid #334155;
-            background: #161226;
-            padding: 14px 16px;
+            background-color: #FFFFFF;
+            border: 1px solid var(--border-subtle);
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 14px;
         }
         .detect-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 10px;
+            margin-bottom: 14px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--border-subtle);
         }
         .detect-title {
             font-size: 13px;
             font-weight: 700;
-            color: #fb7185;
-            display: flex;
-            align-items: center;
-            gap: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--brand-terracotta);
         }
         .detect-metrics {
-            display: flex;
-            gap: 16px;
-            font-size: 12px;
-            color: #cbd5e1;
-            margin-bottom: 10px;
-            background: #0c0a15;
-            padding: 8px 12px;
-            border-radius: 6px;
-            border: 1px solid #2a223f;
-        }
-        .detect-metrics b { color: #f8fafc; }
-
-        /* Separate Layer 1 and Layer 2 Visual Blocks */
-        .layer-container {
             display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-            margin-top: 10px;
-        }
-        @media (max-width: 600px) {
-            .layer-container { grid-template-columns: 1fr; }
-        }
-        .layer-block {
-            background: #0d0a18;
-            border: 1px solid #2a223f;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 12px;
+            font-size: 13px;
+            background-color: var(--bg-subtle);
+            border: 1px solid var(--border-subtle);
             border-radius: 8px;
-            padding: 10px;
+            padding: 12px 16px;
+            margin-bottom: 16px;
         }
-        .layer-title {
+        .detect-metrics div b {
+            color: var(--text-heading);
+        }
+
+        .detect-triplet-title {
             font-size: 11px;
+            color: var(--text-muted);
+            margin-bottom: 8px;
             font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            text-align: center;
+        }
+        .detect-side-img {
+            width: 100%;
+            border-radius: 8px;
+            border: 1px solid var(--border-subtle);
+            box-shadow: var(--shadow-soft);
+        }
+
+        .defects-list-title {
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--status-danger);
+            margin: 16px 0 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .defect-row {
+            background-color: var(--bg-subtle);
+            border: 1px solid var(--border-subtle);
+            border-radius: 6px;
+            padding: 10px 14px;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 8px;
-            padding-bottom: 4px;
-            border-bottom: 1px solid #1f1830;
-        }
-        .layer-title.l1-title { color: #38bdf8; }
-        .layer-title.l2-title { color: #f59e0b; }
-        .layer-images-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 6px;
-        }
-        .layer-img-card {
-            background: #07050d;
-            border-radius: 4px;
-            padding: 4px;
-            text-align: center;
-            border: 1px solid #221b33;
-        }
-        .layer-img-card img {
-            width: 100%;
-            height: 110px;
-            object-fit: contain;
-            border-radius: 3px;
-            background: #000;
-            cursor: pointer;
-        }
-        .layer-img-card span {
-            font-size: 10px;
-            color: #94a3b8;
-            display: block;
-            margin-top: 3px;
+            font-size: 12px;
+            margin-bottom: 6px;
         }
 
-        .detect-side-img {
-            width: 100%;
-            max-height: 240px;
-            object-fit: contain;
-            border-radius: 6px;
-            background: #090811;
-            margin-bottom: 10px;
-            border: 1px solid #3b2d54;
-            cursor: pointer;
+        .quality-gate-footer {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            padding-top: 10px;
+            border-top: 1px solid var(--border-subtle);
+            color: var(--text-muted);
         }
-        .defect-crops-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 8px;
+
+        /* Note box */
+        .forensic-note-card {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 12px;
+            padding: 24px;
+            font-size: 13px;
+            line-height: 1.7;
+            color: var(--text-body);
+            box-shadow: var(--shadow-soft);
         }
-        .defect-crop-card {
-            background: #090811;
-            border: 1px solid #3b2d54;
-            border-radius: 6px;
-            padding: 4px;
-            text-align: center;
-        }
-        .defect-crop-card img {
-            width: 100%;
-            height: 90px;
-            object-fit: contain;
-            border-radius: 4px;
-            background: #000;
-        }
-        .defect-crop-card span {
-            font-size: 10px;
-            color: #fb7185;
+        .forensic-note-card strong {
+            font-family: 'Playfair Display', Georgia, serif;
+            font-size: 16px;
+            color: var(--text-heading);
             display: block;
-            margin-top: 2px;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
+            margin-bottom: 8px;
         }
     </style>
 </head>
 <body>
 
-<div class="header">
-    <h1>📊 Kết Quả Đối Chiếu Ảnh Trả Hàng (Nguyên Bản 100%)</h1>
-    <div class="sub">Mã sản phẩm: <b>{{ product_id }}</b> | Bảo toàn 100% dữ liệu ảnh gốc từ cảm biến camera</div>
-    <div class="session-id">Session ID: {{ session_id }}</div>
-</div>
+<div class="container">
 
-<div class="action-bar">
-    <div style="font-size: 14px; color: #cbd5e1; max-width: 560px; line-height: 1.5;">
-        ⚙️ <b>Quy trình Kiểm Định Khuyết Tật Toàn Diện (v2)</b>:<br>
-        • Bước 1: Tiền xử lý (Pha 1 bóc nền xám 40 + Pha 2 quét lóa sáng)<br>
-        • Bước 2: Kiểm định 2 tầng (Layer 1 Cấu trúc/Nứt vỡ + Layer 2 Màu sắc/Tróc men)
-    </div>
-    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-        <button id="prep-btn" class="btn-preprocess" onclick="runPreprocessing()">
-            {% if has_preprocessed %}
-                🔄 Chạy Lại Tiền Xử Lý
-            {% else %}
-                ⚡ Chạy Tiền Xử Lý (Preprocess &amp; Mask)
-            {% endif %}
-        </button>
-        <button id="detect-btn" class="btn-detect" onclick="runDamageDetection()">
-            {% if has_detected %}
-                🔄 Chạy Lại Kiểm Định AI
-            {% else %}
-                🛡️ Soi Lỗi Đối Chiếu (Reference AI)
-            {% endif %}
-        </button>
-    </div>
-</div>
-<div id="prep-status" style="display:none; text-align:center; margin-bottom:20px; color:#38bdf8; font-weight:600; font-size:15px; padding:10px; background:#1e293b; border-radius:8px;"></div>
+    <header class="header">
+        <div class="header-eyebrow">Quality Assurance &amp; Legal Forensics</div>
+        <h1>Forensic AI Inspection Report</h1>
+        <div class="sub">Vase Profile: <b>{{ product_id }}</b> &bull; Raw Uncompressed Sensor Verification</div>
+        <div class="session-id">Session Token: {{ session_id }}</div>
+    </header>
 
-{% set valid_pairs = pairs | selectattr('similarity', 'ne', None) | list %}
-{% set avg_sim = (valid_pairs | map(attribute='similarity') | sum / valid_pairs | length) if valid_pairs else None %}
-
-{% if avg_sim is not none %}
-    {% set overall_cls = 'high' if avg_sim >= 0.70 else ('medium' if avg_sim >= 0.50 else 'low') %}
-    <div class="overall-card">
-        <div class="overall-label">Độ tương đồng<br>trung bình 4 góc</div>
-        <div class="overall-score {{ overall_cls }}">{{ (avg_sim * 100) | round(1) }}%</div>
-        <div class="overall-bar-wrap">
-            <div class="overall-bar {{ overall_cls }}" style="width: {{ (avg_sim * 100) | round(1) }}%"></div>
+    {% if pipeline_status in ['queued', 'preprocessing', 'inspecting'] %}
+    <div class="processing-banner">
+        <div class="processing-title">
+            Automated AI Analysis In Progress: {{ pipeline_step or "Preprocessing &amp; DINOv2 differential scan..." }}
         </div>
+        <div class="processing-desc">The inspection queue is executing. This report will automatically refresh upon completion.</div>
     </div>
-{% endif %}
-
-<div class="pairs-grid">
-{% for p in pairs %}
-    {% if p.similarity is not none %}
-        {% set cls = 'high' if p.similarity >= 0.70 else ('medium' if p.similarity >= 0.50 else 'low') %}
-        {% set badge_text = '✅ Giống tốt (≥70%)' if p.similarity >= 0.70 else ('⚠️ Có sai lệch' if p.similarity >= 0.50 else '❌ Góc chụp khác nhiều') %}
-    {% else %}
-        {% set cls = 'none' %}
-        {% set badge_text = '— Chưa có ảnh' %}
+    <script>
+        setTimeout(function() { window.location.reload(); }, 2500);
+    </script>
+    {% elif has_preprocessed and has_detected %}
+    <div style="background: var(--status-success-bg); border: 1px solid var(--status-success-border); border-radius: 8px; padding: 12px 18px; text-align: center; margin-bottom: 20px; font-weight: 600; color: var(--status-success); font-size: 13px;">
+        AI verification pipeline completed: RemBG background isolation &amp; DINOv2 differential surface inspection.
+    </div>
     {% endif %}
 
-    <div class="pair-card">
-        <div class="pair-header">
-            <div class="pair-title">{{ p.label }}</div>
-            <div class="badge {{ cls }}">{{ badge_text }}</div>
+    <div class="action-bar">
+        <div class="action-info">
+            <b>Two-Tier Differential Verification Protocol (v2):</b><br>
+            Phase 1: Background segmentation (gray-40) and specular reflection mask.<br>
+            Phase 2: Two-layer defect head (Structural fissures + Chromatic glaze anomalies).
         </div>
-
-        <div class="images-row">
-            <div class="img-cell">
-                <span>Ảnh mẫu gốc (Tham chiếu)</span>
-                {% if p.ghost_url %}
-                    <img src="{{ p.ghost_url }}" alt="Mẫu {{ p.label }}" loading="lazy">
-                {% else %}
-                    <div class="img-missing">Chưa có mẫu</div>
-                {% endif %}
-            </div>
-            <div class="img-cell">
-                <span>Ảnh khách chụp (Gốc 100%)</span>
-                {% if p.captured_url %}
-                    <img src="{{ p.captured_url }}" alt="Chụp {{ p.label }}" loading="lazy">
-                {% else %}
-                    <div class="img-missing">Chưa chụp</div>
-                {% endif %}
-            </div>
-        </div>
-
-        {% if p.prep and p.prep.status == 'ok' %}
-        <div class="prep-section">
-            <div class="prep-header">
-                <div class="prep-title">🔬 Kết Quả Tiền Xử Lý (Pha 1 + Pha 2)</div>
-                {% if p.prep.should_reshoot %}
-                    <div class="badge low">⚠️ Lóa sáng {{ p.prep.ignore_ratio }}% (Nên chụp lại)</div>
-                {% else %}
-                    <div class="badge high">✅ Lóa sáng {{ p.prep.ignore_ratio }}% (Đạt chuẩn)</div>
-                {% endif %}
-            </div>
-            <div class="prep-grid">
-                <div class="prep-card">
-                    <a href="{{ p.prep.processed_url }}" target="_blank">
-                        <img src="{{ p.prep.processed_url }}?t={{ session_id }}" alt="Nền xám 40 + Crop" loading="lazy">
-                    </a>
-                    <span>Nền xám 40 + Tight Crop</span>
-                </div>
-                <div class="prep-card">
-                    <a href="{{ p.prep.ignore_mask_url }}" target="_blank">
-                        <img src="{{ p.prep.ignore_mask_url }}?t={{ session_id }}" alt="Ignore Mask" loading="lazy">
-                    </a>
-                    <span>Mask lóa &amp; bão hòa</span>
-                </div>
-                <div class="prep-card">
-                    <a href="{{ p.prep.overlay_contour_url }}" target="_blank">
-                        <img src="{{ p.prep.overlay_contour_url }}?t={{ session_id }}" alt="Overlay Contour" loading="lazy">
-                    </a>
-                    <span>Viền lóa trực quan</span>
-                </div>
-            </div>
-        </div>
-        {% endif %}
-
-        {% if p.detect and p.detect.status == 'ok' %}
-        <div class="detect-section">
-            <div class="detect-header">
-                <div class="detect-title">🛡️ BÁO CÁO ĐỐI CHIẾU KIỂM ĐỊNH (REFERENCE-GUIDED INSPECTION)</div>
-                {% if p.detect.is_damaged %}
-                    <div class="badge low">🚨 {{ p.detect.severity }}: {{ p.detect.defect_count }} khuyết tật ({{ p.detect.damage_percentage }}% bề mặt)</div>
-                {% else %}
-                    <div class="badge high">✅ Sản phẩm nguyên vẹn 100% (0 khuyết tật)</div>
-                {% endif %}
-            </div>
-
-            <div class="detect-metrics">
-                <div>🏺 Hồ sơ đối chiếu: <b>{{ p.detect.product_id or product_id }}</b></div>
-                <div>🔍 Tình trạng: <b style="color: {{ '#ef4444' if p.detect.is_damaged else '#22c55e' }};">{{ p.detect.severity }}</b></div>
-                <div>🔢 Số khuyết tật: <b style="color: {{ '#ef4444' if p.detect.is_damaged else '#22c55e' }};">{{ p.detect.defect_count }} vết</b></div>
-                <div>📊 Tỷ lệ hư hại: <b>{{ p.detect.damage_percentage }}% diện tích</b></div>
-            </div>
-
-            <!-- ẢNH ĐỐI CHIẾU 3 KHUNG HÌNH (ẢNH HOÀN TRẢ | HEATMAP VI SAI ĐÃ KIỂM CHỨNG | PHÁT HIỆN LỖI) -->
-            {% if p.detect.result_image_url %}
-            <div style="text-align:center; margin-top: 14px;">
-                <div style="font-size: 11px; color:#94a3b8; margin-bottom: 6px; font-weight:600;">
-                    📸 ĐỐI CHIẾU 3 KHUNG HÌNH: 1. Ảnh Khách Chụp | 2. Bản Đồ Nhiệt Vi Sai (&Delta;E) | 3. Khoanh Vùng &amp; Gắn Nhãn Khuyết Tật:
-                </div>
-                <a href="{{ p.detect.result_image_url }}" target="_blank">
-                    <img class="detect-side-img" src="{{ p.detect.result_image_url }}?t={{ session_id }}" alt="Ket qua kiem dinh" loading="lazy" style="width:100%; border-radius:8px; border:1px solid #334155;">
-                </a>
-            </div>
-            {% endif %}
-
-            <!-- DANH SÁCH CHI TIẾT TỪNG VẾT KHUYẾT TẬT -->
-            {% if p.detect.defects and p.detect.defects | length > 0 %}
-            <div style="font-size: 12px; color:#fb7185; margin: 14px 0 6px 0; font-weight:700;">
-                🔍 Chi tiết {{ p.detect.defects | length }} vị trí khuyết tật phát hiện được:
-            </div>
-            <div style="display:flex; flex-direction:column; gap:6px; margin-top:6px;">
-                {% for d in p.detect.defects %}
-                <div style="background:#0f172a; border:1px solid #334155; border-radius:6px; padding:8px 12px; display:flex; justify-content:space-between; align-items:center; font-size:12px;">
-                    <div>
-                        <span style="font-weight:700; color: {{ '#ef4444' if d.category == 'crack_or_dark_hole' else ('#f97316' if d.category == 'ink_mark_color' else '#eab308') }};">
-                            #{{ loop.index }}. {{ d.label }}
-                        </span>
-                        <span style="color:#94a3b8; margin-left:8px;">
-                            (Tọa độ X={{ d.bbox[0] }}, Y={{ d.bbox[1] }}, Rộng={{ d.bbox[2] }}, Cao={{ d.bbox[3] }})
-                        </span>
-                    </div>
-                    <div style="color:#cbd5e1; font-weight:600;">
-                        {{ d.area_pixels | round(0) }} px
-                    </div>
-                </div>
-                {% endfor %}
-            </div>
-            {% endif %}
-        </div>
-        {% elif p.detect and p.detect.status == 'error' %}
-        <div class="detect-section" style="border-left: 3px solid #ef4444;">
-            <div class="detect-header">
-                <div class="detect-title">🛡️ Kiểm Định Khuyết Tật</div>
-                <div class="badge low">❌ {{ p.detect.message }}</div>
-            </div>
-            <div style="font-size: 12px; color: #94a3b8; padding: 4px 0;">Vui lòng bấm nút "🔍 Chạy Kiểm Định Khuyết Tật" bên trên để chạy lại.</div>
-        </div>
-        {% endif %}
-
-        {% if p.similarity is not none %}
-        <div class="metrics-row">
-            <div>Cấu trúc (NCC): <b>{{ ((p.ncc or 0) * 100) | round(1) }}%</b></div>
-            <div>Đường viền: <b>{{ ((p.edge or 0) * 100) | round(1) }}%</b></div>
-            <div>Màu sắc: <b>{{ (((p.color if p.color is not none else p.corr) or 0) * 100) | round(1) }}%</b></div>
-        </div>
-        {% endif %}
-
-        <div class="sim-bar-wrap">
-            <div class="sim-label-row">
-                <span>Độ tương đồng thực tế</span>
-                {% if p.similarity is not none %}
-                    <strong class="{{ cls }}">{{ (p.similarity * 100) | round(1) }}%</strong>
-                {% else %}
-                    <strong class="none">—</strong>
-                {% endif %}
-            </div>
-            <div class="sim-bar-bg">
-                <div class="sim-bar-fill {{ cls }}"
-                     style="width: {{ (p.similarity * 100) | round(1) if p.similarity is not none else 0 }}%">
-                </div>
-            </div>
+        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+            <button id="prep-btn" class="btn-action-secondary" onclick="runPreprocessing()">
+                {% if has_preprocessed %}Rerun Preprocessing{% else %}Run Preprocessing &amp; Mask{% endif %}
+            </button>
+            <button id="detect-btn" class="btn-action-primary" onclick="runDamageDetection()">
+                {% if has_detected %}Rerun AI Inspection{% else %}Run Reference AI Inspection{% endif %}
+            </button>
         </div>
     </div>
-{% endfor %}
-</div>
 
-<div class="note">
-    <strong>Bảo toàn tính trung thực của ảnh bằng chứng:</strong><br>
-    • <b>Không chỉnh sửa / Không biến dạng (Zero Warping)</b>: Toàn bộ ảnh trả hàng tải lên được giữ nguyên bản 100% từ cảm biến camera điện thoại của khách hàng. Không có bất kỳ can thiệp cắt xén hay biến dạng ảnh nào được thực hiện.<br>
-    • <b>Mục tiêu của bóng mờ trên điện thoại</b>: Hướng dẫn người dùng trong thế giới thực tự căn chỉnh khoảng cách và góc máy cho thật khớp trước khi chụp. Nhờ đó, ảnh chụp tự nhiên có độ tương đồng cao nhất mà vẫn hoàn toàn trung thực với thực tế.<br>
-    • <b>Ý nghĩa của tiền xử lý &amp; mask</b>: Tách nền xám 40 giúp thuật toán so sánh không bị đánh lừa bởi màu nền phía sau, trong khi mask lóa sáng loại trừ các điểm phản quang bóng loáng tránh báo nhầm lỗi hỏng bề mặt.<br>
-    • <b>Kiểm định khuyết tật đa tầng (v2)</b>: Gọi trực tiếp mô hình phân tích lưới biến dạng Delaunay, quang học sắc tố tróc men (Layer 2: Chroma ab &amp; Luminance L + DINOv2) và đánh giá đa tầng 3-Tier Fusion để xuất minh chứng trực quan minh bạch.
+    <!-- TESTER TOOLBAR -->
+    <div class="tester-toolbar">
+        <div>
+            <div class="tester-title">
+                <span>Quality Assurance Sandbox: Defect Simulation &amp; Stress Testing</span>
+                {% if is_simulated %}
+                    <span class="tag danger">FLAW INJECTED</span>
+                {% endif %}
+            </div>
+            <div class="tester-sub">
+                Inject calibrated synthetic flaws directly into frames to benchmark inspection sensitivity and localization accuracy.
+            </div>
+        </div>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <button class="btn-sim" onclick="runDefectSimulation('crack')">Inject Crack</button>
+            <button class="btn-sim" onclick="runDefectSimulation('stain')">Inject Stain</button>
+            <button class="btn-sim" onclick="runDefectSimulation('chip')">Inject Chip</button>
+            <button class="btn-sim" onclick="runDefectSimulation('random')">Inject Random Flaw</button>
+            {% if is_simulated %}
+                <button class="btn-sim reset" onclick="runResetSimulation()">Reset to Original</button>
+            {% endif %}
+        </div>
+    </div>
+
+    <div id="prep-status" style="display:none; text-align:center; margin-bottom:20px; color:var(--brand-terracotta); font-weight:600; font-size:14px; padding:12px; background:var(--bg-card); border:1px solid var(--border-subtle); border-radius:8px;"></div>
+
+    <!-- EXECUTIVE VERDICT CARD -->
+    {% if inspection_summary and inspection_summary.verdict == 'INTACT' %}
+        <div class="executive-card intact">
+            <h2 class="executive-title">INSPECTION VERDICT: RETURN APPROVED (INTACT)</h2>
+            <div class="executive-desc">
+                All 4 viewing angles show zero structural cracks, chips, or glaze degradation beyond calibrated manufacturing tolerances.
+            </div>
+            <div class="executive-tags">
+                <span class="tag success">0 Defects Detected</span>
+                <span class="tag success">Matched with Profile {{ product_id }}</span>
+                <span class="tag success">4/4 Angles Passed Calibration</span>
+            </div>
+        </div>
+    {% elif inspection_summary and inspection_summary.verdict == 'DEFECTIVE' %}
+        <div class="executive-card defective">
+            <h2 class="executive-title">INSPECTION VERDICT: DEFECT DETECTED (REJECTED / CLAIM)</h2>
+            <div class="executive-desc">
+                Detected a total of <b>{{ inspection_summary.total_defects }}</b> flaw(s) across <b>{{ inspection_summary.damaged_views_count }}</b> angle(s). Escalated to claims settlement.
+            </div>
+            <div class="executive-tags">
+                <span class="tag danger">{{ inspection_summary.total_defects }} Anomalies Localized</span>
+                <span class="tag danger">{{ inspection_summary.damaged_views_count }}/4 Angles Damaged</span>
+                {% if inspection_summary.dedup_pairs and inspection_summary.dedup_pairs|length > 0 %}
+                    <span class="tag info">{{ inspection_summary.dedup_pairs|length }} 3D Cross-View Merge(s)</span>
+                {% endif %}
+                <span class="tag warning">Warehouse Confirmation Pending</span>
+            </div>
+        </div>
+    {% elif inspection_summary and inspection_summary.verdict == 'NEEDS_REVIEW' %}
+        <div class="executive-card pending" style="border-left: 6px solid #e08c26;">
+            <h2 class="executive-title" style="color: #c97210;">INSPECTION VERDICT: NEEDS MANUAL REVIEW</h2>
+            <div class="executive-desc">
+                Quality Gate flagged potential alignment uncertainty, excessive glare, or occlusion. Human inspection verification required before decision.
+            </div>
+            <div class="executive-tags">
+                <span class="tag warning">Manual Review Required</span>
+                <span class="tag info">{{ inspection_summary.uploaded_count if inspection_summary else 4 }}/4 Views Inspected</span>
+            </div>
+        </div>
+    {% else %}
+        <div class="executive-card pending">
+            <h2 class="executive-title">4-ANGLE DATASET READY FOR INSPECTION</h2>
+            <div class="executive-desc">
+                Collected {{ inspection_summary.uploaded_count if inspection_summary else 4 }}/4 angles passing Level 1 Gate. Click <b>"Run Reference AI Inspection"</b> to run differential DINOv2 analysis.
+            </div>
+            <div class="executive-tags">
+                <span class="tag info">{{ inspection_summary.uploaded_count if inspection_summary else 4 }}/4 Views Uploaded</span>
+                <span class="tag success">Gate Level 1: Sharpness &amp; Anti-Glare Passed</span>
+            </div>
+        </div>
+    {% endif %}
+
+    <div class="pairs-grid">
+    {% for p in pairs %}
+        {% if p.detect and p.detect.status == 'ok' %}
+            {% if p.detect.is_damaged %}
+                {% set badge_cls = 'low' %}
+                {% set badge_text = p.detect.defect_count ~ ' defect(s)' %}
+            {% else %}
+                {% set badge_cls = 'high' %}
+                {% set badge_text = '100% Intact' %}
+            {% endif %}
+        {% elif p.captured_url %}
+            {% set badge_cls = 'high' %}
+            {% set badge_text = 'Angle Uploaded' %}
+        {% else %}
+            {% set badge_cls = 'none' %}
+            {% set badge_text = 'Pending Upload' %}
+        {% endif %}
+
+        <div class="pair-card">
+            <div class="pair-header">
+                <div class="pair-title">{{ p.label }}</div>
+                <div class="badge-pill {{ badge_cls }}">{{ badge_text }}</div>
+            </div>
+
+            <div class="images-row">
+                <div class="img-cell">
+                    <span>Reference Standard (Profile)</span>
+                    {% if p.ghost_url %}
+                        <img src="{{ p.ghost_url }}" alt="Standard {{ p.label }}" loading="lazy">
+                    {% else %}
+                        <div class="img-missing">Reference Missing</div>
+                    {% endif %}
+                </div>
+                <div class="img-cell">
+                    <span>Customer Uploaded (Raw Sensor)</span>
+                    {% if p.captured_url %}
+                        <img src="{{ p.captured_url }}" alt="Capture {{ p.label }}" loading="lazy">
+                    {% else %}
+                        <div class="img-missing">Awaiting Capture</div>
+                    {% endif %}
+                </div>
+            </div>
+
+            {% if p.prep and p.prep.status == 'ok' %}
+            <div class="prep-section">
+                <div class="prep-header">
+                    <div class="prep-title">Preprocessing &amp; Specular Analysis (Phase 1 &amp; Phase 2)</div>
+                    {% if p.prep.should_reshoot %}
+                        <div class="badge-pill low">Glare: {{ p.prep.ignore_ratio }}% (High Reflection)</div>
+                    {% else %}
+                        <div class="badge-pill high">Glare: {{ p.prep.ignore_ratio }}% (Within Tolerance)</div>
+                    {% endif %}
+                </div>
+                <div class="prep-grid">
+                    <div class="prep-card">
+                        <a href="{{ p.prep.processed_url }}" target="_blank">
+                            <img src="{{ p.prep.processed_url }}?t={{ session_id }}" alt="Segmented Canvas" loading="lazy">
+                        </a>
+                        <span>Isolated Contour (Gray 40)</span>
+                    </div>
+                    <div class="prep-card">
+                        <a href="{{ p.prep.ignore_mask_url }}" target="_blank">
+                            <img src="{{ p.prep.ignore_mask_url }}?t={{ session_id }}" alt="Ignore Mask" loading="lazy">
+                        </a>
+                        <span>Specular &amp; Saturation Mask</span>
+                    </div>
+                    <div class="prep-card">
+                        <a href="{{ p.prep.overlay_contour_url }}" target="_blank">
+                            <img src="{{ p.prep.overlay_contour_url }}?t={{ session_id }}" alt="Overlay Contour" loading="lazy">
+                        </a>
+                        <span>Glare Region Overlay</span>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            {% if p.detect and p.detect.status == 'ok' %}
+            <div class="detect-section">
+                <div class="detect-header">
+                    <div class="detect-title">Reference-Guided Differential Examination</div>
+                    {% if p.detect.is_damaged %}
+                        <div class="badge-pill low">{{ p.detect.severity }}: {{ p.detect.defect_count }} flaw(s) ({{ p.detect.damage_percentage }}% surface)</div>
+                    {% else %}
+                        <div class="badge-pill high">Surface Verified Intact (0 defects)</div>
+                    {% endif %}
+                </div>
+
+                <div class="detect-metrics">
+                    <div>Reference Profile: <b>{{ p.detect.product_id or product_id }}</b></div>
+                    <div>Condition Verdict: <b style="color: {{ 'var(--status-danger)' if p.detect.is_damaged else 'var(--status-success)' }};">{{ p.detect.severity }}</b></div>
+                    <div>Flaw Count: <b style="color: {{ 'var(--status-danger)' if p.detect.is_damaged else 'var(--status-success)' }};">{{ p.detect.defect_count }}</b></div>
+                    <div>Damage Ratio: <b>{{ p.detect.damage_percentage }}%</b></div>
+                </div>
+
+                {% if p.detect.result_image_url %}
+                <div style="text-align:center; margin-top: 14px;">
+                    <div class="detect-triplet-title">
+                        3-Panel Forensic Comparison: 1. Customer Raw | 2. Color Difference (&Delta;E) | 3. Annotated Flaw Bounding Boxes
+                    </div>
+                    <a href="{{ p.detect.result_image_url }}" target="_blank">
+                        <img class="detect-side-img" src="{{ p.detect.result_image_url }}?t={{ session_id }}" alt="Forensic Inspection Result" loading="lazy">
+                    </a>
+                </div>
+                {% endif %}
+
+                {% if p.detect.defects and p.detect.defects | length > 0 %}
+                <div class="defects-list-title">
+                    Detailed Localization of {{ p.detect.defects | length }} Detected Anomaly Region(s):
+                </div>
+                <div style="display:flex; flex-direction:column; gap:6px; margin-top:6px;">
+                    {% for d in p.detect.defects %}
+                    <div class="defect-row">
+                        <div>
+                            <span style="font-weight:700; color: {{ 'var(--status-danger)' if d.category == 'crack_or_dark_hole' else ('#B47B19' if d.category == 'ink_mark_color' else 'var(--brand-terracotta)') }};">
+                                #{{ loop.index }}. {{ d.label }}
+                            </span>
+                            <span style="color:var(--text-muted); margin-left:8px;">
+                                (BBox X={{ d.bbox[0] }}, Y={{ d.bbox[1] }}, W={{ d.bbox[2] }}, H={{ d.bbox[3] }})
+                            </span>
+                        </div>
+                        <div style="color:var(--text-heading); font-weight:600; font-family: monospace;">
+                            {{ d.area_pixels | round(0) }} px
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            {% elif p.detect and p.detect.status == 'error' %}
+            <div class="detect-section" style="border-left: 3px solid var(--status-danger);">
+                <div class="detect-header">
+                    <div class="detect-title">Defect Inspection</div>
+                    <div class="badge-pill low">{{ p.detect.message }}</div>
+                </div>
+                <div style="font-size: 12px; color: var(--text-muted); padding: 4px 0;">Please click "Run Reference AI Inspection" above to re-execute.</div>
+            </div>
+            {% endif %}
+
+            {% if p.similarity is not none %}
+            <div class="quality-gate-footer">
+                <span>Gate Level 1: <b style="color: var(--brand-terracotta);">Passed</b></span>
+                <span>Contour &amp; Glaze Alignment: <b style="color: var(--status-success);">{{ (p.similarity * 100) | round(1) }}%</b></span>
+            </div>
+            {% endif %}
+        </div>
+    {% endfor %}
+    </div>
+
+    <div class="forensic-note-card">
+        <strong>Forensic Integrity &amp; Evidence Assurance Protocol:</strong>
+        &bull; <b>Zero Warping Principle:</b> Customer uploaded photographs are preserved 100% in their native camera sensor fidelity without artificial warping or interpolation artifacts.<br>
+        &bull; <b>Optical Ghost Silhouette:</b> Guides the user in physical space to establish correct perspective and focal distance prior to shutter actuation, eliminating geometric perspective skew.<br>
+        &bull; <b>Specular Reflection Filtering:</b> Specular highlights and saturated reflections are isolated into ignore masks to prevent false-positive anomaly detections on glossy ceramic glazes.<br>
+        &bull; <b>Two-Layer Differential Architecture:</b> Integrates foundation vision embeddings (DINOv2) with CIELAB colorimetric disparity analysis to deliver transparent, auditable evidence for claims resolution.
+    </div>
+
 </div>
 
 <script>
@@ -667,27 +818,25 @@ async function runPreprocessing() {
     const btn = document.getElementById('prep-btn');
     const status = document.getElementById('prep-status');
     btn.disabled = true;
-    btn.textContent = '⏳ Đang phân tích...';
+    btn.textContent = 'Processing...';
     status.style.display = 'block';
-    status.innerHTML = '⏳ Đang chạy module tiền xử lý: Bóc nền xám 40, cắt bounding box, phân tích quang học lóa sáng cho cả 4 góc...';
+    status.innerHTML = 'Executing preprocessing pipeline: Background isolation (gray-40), bounding crop, and specular reflection masking...';
 
     try {
         const res = await fetch('/api/session/{{ session_id }}/preprocess', { method: 'POST' });
         const data = await res.json();
         if (data.status === 'ok') {
-            status.innerHTML = '✅ Hoàn tất tiền xử lý và quét lóa sáng! Đang làm mới trang...';
-            setTimeout(() => {
-                window.location.reload();
-            }, 800);
+            status.innerHTML = 'Preprocessing completed. Refreshing inspection report...';
+            setTimeout(() => { window.location.reload(); }, 800);
         } else {
-            status.innerHTML = '❌ Lỗi: ' + (data.error || 'Xử lý không thành công');
+            status.innerHTML = 'Error: ' + (data.error || 'Preprocessing failed');
             btn.disabled = false;
-            btn.textContent = '⚡ Chạy Tiền Xử Lý (Preprocess & Mask)';
+            btn.textContent = 'Run Preprocessing & Mask';
         }
     } catch (e) {
-        status.innerHTML = '❌ Lỗi kết nối: ' + e.message;
+        status.innerHTML = 'Connection error: ' + e.message;
         btn.disabled = false;
-        btn.textContent = '⚡ Chạy Tiền Xử Lý (Preprocess & Mask)';
+        btn.textContent = 'Run Preprocessing & Mask';
     }
 }
 
@@ -695,9 +844,9 @@ async function runDamageDetection() {
     const btn = document.getElementById('detect-btn');
     const status = document.getElementById('prep-status');
     btn.disabled = true;
-    btn.textContent = '⏳ Đang kiểm định...';
+    btn.textContent = 'Inspecting...';
     status.style.display = 'block';
-    status.innerHTML = '⏳ Đang đối chiếu vi sai qua Cổng kiểm chứng AI (Reference-Guided DINOv2)...';
+    status.innerHTML = 'Executing reference-guided differential inspection (DINOv2 + CIELAB)...';
 
     try {
         const res = await fetch('/api/session/{{ session_id }}/detect', { method: 'POST' });
@@ -706,22 +855,67 @@ async function runDamageDetection() {
         try {
             data = JSON.parse(text);
         } catch (err) {
-            throw new Error(`Phản hồi máy chủ không hợp lệ (mã ${res.status}): ${text.slice(0, 100)}`);
+            throw new Error(`Invalid server response (status ${res.status}): ${text.slice(0, 100)}`);
         }
         if (data.status === 'ok') {
-            status.innerHTML = '✅ Hoàn tất phân tích khuyết tật! Đang tải lại kết quả...';
-            setTimeout(() => {
-                window.location.reload();
-            }, 800);
+            status.innerHTML = 'Differential inspection complete. Reloading report...';
+            setTimeout(() => { window.location.reload(); }, 800);
         } else {
-            status.innerHTML = '❌ Lỗi: ' + (data.error || data.message || 'Kiểm định không thành công');
+            status.innerHTML = 'Inspection Error: ' + (data.error || data.message || 'Inspection failed');
             btn.disabled = false;
-            btn.textContent = '🛡️ Soi Lỗi Đối Chiếu (Reference AI)';
+            btn.textContent = 'Run Reference AI Inspection';
         }
     } catch (e) {
-        status.innerHTML = '❌ Lỗi kiểm định: ' + e.message;
+        status.innerHTML = 'Connection error: ' + e.message;
         btn.disabled = false;
-        btn.textContent = '🛡️ Soi Lỗi Đối Chiếu (Reference AI)';
+        btn.textContent = 'Run Reference AI Inspection';
+    }
+}
+
+async function runDefectSimulation(type) {
+    const status = document.getElementById('prep-status');
+    status.style.display = 'block';
+    status.innerHTML = 'Injecting synthetic flaw (' + type.toUpperCase() + ') and executing differential inspection...';
+    
+    const formData = new FormData();
+    formData.append('defect_type', type);
+    formData.append('view', 'random');
+
+    try {
+        const res = await fetch('/api/session/{{ session_id }}/simulate-defect', {
+            method: 'POST',
+            body: formData
+        });
+        const data = await res.json();
+        if (data.status === 'ok') {
+            status.innerHTML = 'Flaw (' + data.defect_type.toUpperCase() + ') injected into ' + data.view + ' view. Reloading report...';
+            setTimeout(() => window.location.reload(), 1200);
+        } else {
+            status.innerHTML = 'Simulation error: ' + (data.message || 'Failed to inject defect');
+        }
+    } catch (err) {
+        status.innerHTML = 'Connection error: ' + err.message;
+    }
+}
+
+async function runResetSimulation() {
+    const status = document.getElementById('prep-status');
+    status.style.display = 'block';
+    status.innerHTML = 'Resetting to original raw capture frames and recomputing metrics...';
+
+    try {
+        const res = await fetch('/api/session/{{ session_id }}/reset-simulation', {
+            method: 'POST'
+        });
+        const data = await res.json();
+        if (data.status === 'ok') {
+            status.innerHTML = 'Original frame restored. Reloading report...';
+            setTimeout(() => window.location.reload(), 1000);
+        } else {
+            status.innerHTML = 'Reset error: ' + (data.message || 'Failed to reset simulation');
+        }
+    } catch (err) {
+        status.innerHTML = 'Connection error: ' + err.message;
     }
 }
 </script>

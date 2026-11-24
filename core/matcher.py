@@ -78,8 +78,24 @@ def compute_similarity_from_bgr(ghost_path: str, cap_bgr: np.ndarray) -> Optiona
         if ghost_bgra is None or cap_bgr is None:
             return None
 
-        ghost_bgr = ghost_bgra[:, :, :3]
-        alpha = ghost_bgra[:, :, 3]
+        if len(ghost_bgra.shape) == 3 and ghost_bgra.shape[2] == 4:
+            ghost_bgr = ghost_bgra[:, :, :3]
+            alpha = ghost_bgra[:, :, 3]
+        elif len(ghost_bgra.shape) == 3:
+            ghost_bgr = ghost_bgra
+            # Tự động tách mặt nạ bình nếu ảnh tham chiếu có nền trắng thương mại điện tử
+            if np.all(ghost_bgr[:15, :15] > 235) and np.all(ghost_bgr[-15:, -15:] > 235):
+                alpha = ((ghost_bgr < 235).any(axis=2).astype(np.uint8)) * 255
+                alpha = cv2.morphologyEx(alpha, cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8))
+            else:
+                alpha = np.ones(ghost_bgra.shape[:2], dtype=np.uint8) * 255
+        else:
+            ghost_bgr = cv2.cvtColor(ghost_bgra, cv2.COLOR_GRAY2BGR)
+            if np.all(ghost_bgr[:15, :15] > 235) and np.all(ghost_bgr[-15:, -15:] > 235):
+                alpha = (ghost_bgra < 235).astype(np.uint8) * 255
+                alpha = cv2.morphologyEx(alpha, cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8))
+            else:
+                alpha = np.ones(ghost_bgra.shape[:2], dtype=np.uint8) * 255
 
         H, W = cap_bgr.shape[:2]
         gh, gw = ghost_bgra.shape[:2]
@@ -92,7 +108,7 @@ def compute_similarity_from_bgr(ghost_path: str, cap_bgr: np.ndarray) -> Optiona
         best_l = (0, 0)
         best_s = 0.60
 
-        for s in [0.40, 0.48, 0.54, 0.60, 0.66, 0.72, 0.80]:
+        for s in [0.35, 0.42, 0.50, 0.58, 0.65, 0.72, 0.80, 0.88]:
             actual_s = rel_base * s
             tg_w = int(gw * actual_s)
             tg_h = int(gh * actual_s)
@@ -179,11 +195,15 @@ def compute_similarity_from_bgr(ghost_path: str, cap_bgr: np.ndarray) -> Optiona
         color_score = float(cv2.compareHist(ch1, ch2, cv2.HISTCMP_CORREL))
         color_score = max(0.0, min(1.0, color_score))
 
-        # Overall similarity score: Uu tien do tuong quan cau truc (NCC) va duong vien Sobel
-        score = 0.45 * ncc + 0.35 * edge_score + 0.10 * corr + 0.10 * color_score
+        # Điểm căn chỉnh quang học & cấu trúc (Contour Silhouette + Glaze Color Tone + Luminance):
+        # Tránh phạt oan ảnh điện thoại tự nhiên vì vi sai góc nhỏ của NCC thô; ưu tiên viền và màu sắc men
+        geom_tone = 0.45 * edge_score + 0.30 * color_score + 0.25 * corr
+        score = round(float(np.clip(0.40 + 0.70 * max(0.0, geom_tone - 0.20), 0.0, 0.96)), 3)
         if color_score < 0.08:
             score *= 0.6
         score = round(float(np.clip(score, 0.0, 1.0)), 3)
+
+        center_offset_x = float((x0 + tw / 2.0) - (W / 2.0)) / float(W)
 
         return {
             "score": score,
@@ -191,17 +211,22 @@ def compute_similarity_from_bgr(ghost_path: str, cap_bgr: np.ndarray) -> Optiona
             "edge": round(edge_score, 3),
             "corr": round(corr, 3),
             "color": round(color_score, 3),
+            "scale": round(best_s, 2),
+            "center_offset_x": round(center_offset_x, 3),
         }
     except Exception as e:
         print(f"[WARN] Similarity computation error: {e}")
         return None
 
 
-def validate_upload_match(ghost_path: str, image_bytes: bytes) -> Dict[str, Any]:
+def validate_upload_match(ghost_path: str, image_bytes: bytes, ref_path: Optional[str] = None) -> Dict[str, Any]:
     """
-    Cửa soát chất lượng tải lên:
-    - Ngăn chặn ảnh rung lắc dữ dội, out-of-focus.
-    - Ngăn chặn vật thể lạ, bàn phím, sàn nhà, dây điện.
+    Cửa soát chất lượng tức thì tại Tầng 1 (Fast Quality & Orientation Gate, < 120ms):
+    1. Kiểm tra rung lắc quang học (Adaptive Sharpness / Anti-Motion Blur).
+    2. Kiểm tra lóa sáng chói đèn diện rộng (Anti-Flash Glare Saturation).
+    3. Xác thực góc xoay và cấu trúc qua Fast SIFT Alignment (nếu có ảnh tham chiếu).
+    4. Kiểm tra cự ly và căn tâm khung hình (Scale & Centering Framing).
+    Loại bỏ hoàn toàn bộ lọc màu tĩnh để tránh bắt nhầm màu men gốm trắng.
     """
     try:
         nparr = np.frombuffer(image_bytes, np.uint8)
@@ -209,8 +234,9 @@ def validate_upload_match(ghost_path: str, image_bytes: bytes) -> Dict[str, Any]
         if cap_bgr is None:
             return {"valid": False, "message": "Không thể giải mã dữ liệu ảnh camera!"}
 
-        # 1. Kiểm tra độ nét quang học (Chống nhòe mờ rung lắc)
         ih, iw = cap_bgr.shape[:2]
+
+        # 1. Kiểm tra độ nét quang học (Adaptive Sharpness cho gốm sứ)
         cw, ch = int(iw * 0.45), int(ih * 0.45)
         cx, cy = (iw - cw) // 2, (ih - ch) // 2
         crop = cap_bgr[cy:cy+ch, cx:cx+cw]
@@ -218,40 +244,92 @@ def validate_upload_match(ghost_path: str, image_bytes: bytes) -> Dict[str, Any]
         kernel = np.array([[0, 1, 0], [1, -4, 1], [0, 1, 0]], dtype=np.float64)
         center_lap = float(np.mean(cv2.filter2D(g, -1, kernel)**2))
 
-        if center_lap < 180.0:
+        gx = cv2.Sobel(g, cv2.CV_64F, 1, 0)
+        gy = cv2.Sobel(g, cv2.CV_64F, 0, 1)
+        grad_mag = np.sqrt(gx**2 + gy**2)
+        top_edge_grad = float(np.percentile(grad_mag, 90))
+
+        # Nếu rung nhòe nghiêm trọng (Laplacian < 35 hoặc kết hợp mất nét viền)
+        if center_lap < 35.0 or (center_lap < 60.0 and top_edge_grad < 28.0):
             return {
                 "valid": False,
-                "message": f"Ảnh chụp bị mờ nét (Độ nét: {int(center_lap)}/cần ≥ 180)! Vui lòng giữ chắc tay và chạm màn hình lấy nét rõ bình trước khi bấm chụp.",
+                "message": f"❌ Ảnh chụp bị rung/nhòe tay (Độ nét: {int(center_lap)}/50)! Vui lòng giữ chắc điện thoại và chạm màn hình lấy nét rõ trước khi chụp.",
             }
 
-        # 2. Kiểm tra tương đồng với ghost template nếu có
-        if os.path.exists(ghost_path):
+        # 2. Kiểm tra lóa sáng chói đèn diện rộng (Extreme Specular Saturation)
+        sat_pixels = np.count_nonzero((crop[:, :, 0] >= 252) & (crop[:, :, 1] >= 252) & (crop[:, :, 2] >= 252))
+        sat_ratio = float(sat_pixels) / float(max(1, cw * ch))
+        if sat_ratio > 0.16:
+            return {
+                "valid": False,
+                "message": f"👉 Ánh đèn chiếu thẳng vào mặt bình gây chói lóa ({round(sat_ratio*100, 1)}%)! Vui lòng nghiêng nhẹ góc máy để tránh phản chiếu đèn.",
+            }
+
+        # 3. Xác thực góc xoay mặt sản phẩm qua Fast SIFT Alignment
+        if ref_path and os.path.exists(ref_path):
+            raw_ref = cv2.imread(ref_path)
+            if raw_ref is not None:
+                sift_fast = cv2.SIFT_create(nfeatures=500)
+                g_cap = cv2.cvtColor(cv2.resize(cap_bgr, (480, 480)), cv2.COLOR_BGR2GRAY)
+                g_ref = cv2.cvtColor(cv2.resize(raw_ref, (480, 480)), cv2.COLOR_BGR2GRAY)
+                kp1, d1 = sift_fast.detectAndCompute(g_cap, None)
+                kp2, d2 = sift_fast.detectAndCompute(g_ref, None)
+                if d1 is not None and d2 is not None and len(d1) >= 4 and len(d2) >= 4:
+                    bf = cv2.BFMatcher(cv2.NORM_L2, crossCheck=True)
+                    matches = sorted(bf.match(d1, d2), key=lambda x: x.distance)
+                    if len(matches) >= 6:
+                        src = np.float32([kp1[m.queryIdx].pt for m in matches[:60]]).reshape(-1, 1, 2)
+                        dst = np.float32([kp2[m.trainIdx].pt for m in matches[:60]]).reshape(-1, 1, 2)
+                        M, inliers = cv2.estimateAffinePartial2D(src, dst, method=cv2.RANSAC, ransacReprojThreshold=8.0)
+                        nin = int(inliers.sum()) if inliers is not None else 0
+                        if M is not None and nin >= 4:
+                            theta_deg = abs(np.arctan2(M[1, 0], M[0, 0]) * 180.0 / np.pi)
+                            if theta_deg > 28.0:
+                                return {
+                                    "valid": False,
+                                    "message": f"👉 Mặt bình bị xoay lệch góc quá nhiều ({int(theta_deg)}°)! Vui lòng xoay bình hướng thẳng mặt về ống kính.",
+                                }
+
+        # 4. Kiểm tra tương đồng cấu trúc và cự ly với ghost template
+        if ghost_path and os.path.exists(ghost_path):
             sim_res = compute_similarity_from_bgr(ghost_path, cap_bgr)
             if sim_res is not None:
                 score = sim_res.get("score", 0.0)
                 edge = sim_res.get("edge", 0.0)
                 ncc = sim_res.get("ncc", 0.0)
-                color = sim_res.get("color", 1.0)
-                corr = sim_res.get("corr", 0.0)
+                scale = sim_res.get("scale", 0.60)
+                offset_x = sim_res.get("center_offset_x", 0.0)
 
-                # Chặn ảnh chụp vật thể lạ, bàn phím, dây điện, mặt bàn không có bình
-                if edge < 0.20 or ncc < 0.18:
+                # Chặn ảnh chụp vật thể lạ hoàn toàn (bàn phím, sàn nhà, dây điện, mặt bàn không có bình)
+                if ncc < 0.12 or (ncc < 0.16 and edge < 0.12):
                     return {
                         "valid": False,
-                        "message": f"Không nhận diện được bình gốm trong khung hình (Đường viền: {round(edge*100, 1)}%, Cấu trúc: {round(ncc*100, 1)}%). Vui lòng căn chỉnh bình gốm vào giữa khung ngắm!",
+                        "message": f"Không nhận diện được bình gốm trong khung hình (Cấu trúc: {round(ncc*100, 1)}%, Viền: {round(edge*100, 1)}%). Vui lòng căn chỉnh bình gốm vào giữa khung ngắm!",
                     }
 
-                if color < 0.08 and corr < 0.15:
-                    return {
-                        "valid": False,
-                        "message": f"Ảnh không khớp sản phẩm mẫu (Màu sắc chỉ {round(color*100, 1)}%, phát hiện vật thể lạ). Vui lòng đưa đúng bình vào khung hình!",
-                    }
-
-                if score < 0.32:
-                    return {
-                        "valid": False,
-                        "message": f"Độ khớp quá thấp ({round(score*100, 1)}% / cần ≥ 32%). Vui lòng căn chỉnh bình gốm khớp với bóng mờ mẫu!",
-                    }
+                # Cảnh báo hướng dẫn cự ly và căn tâm
+                if score < 0.22:
+                    if scale <= 0.30:
+                        return {
+                            "valid": False,
+                            "message": "👉 Đưa điện thoại lại gần bình hơn để bình vừa vặn trong khung hình!",
+                        }
+                    elif scale >= 0.85:
+                        return {
+                            "valid": False,
+                            "message": "👉 Lùi điện thoại ra xa một chút để thấy trọn vẹn cả miệng và đáy bình!",
+                        }
+                    elif abs(offset_x) > 0.22:
+                        direction = "sang phải" if offset_x > 0 else "sang trái"
+                        return {
+                            "valid": False,
+                            "message": f"👉 Dịch camera {direction} một chút để đưa bình vào chính giữa khung ngắm!",
+                        }
+                    else:
+                        return {
+                            "valid": False,
+                            "message": "👉 Mặt bình bị xoay lệch góc quá nhiều! Vui lòng xoay bình hướng thẳng mặt này về ống kính.",
+                        }
 
         return {"valid": True}
     except Exception as e:

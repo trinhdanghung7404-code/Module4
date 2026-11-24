@@ -1,301 +1,453 @@
 <!DOCTYPE html>
-<html lang="vi">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hệ Thống Quản Lý Sản Phẩm & Trả Hàng</title>
+    <title>AI Developer Workbench — Gốm Mộc Inspection Engine</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,400&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --bg-page: #FAF6F0;
+            --bg-card: #FFFFFF;
+            --bg-subtle: #F4EFEA;
+            --border-subtle: #E8DFD5;
+            --border-hover: #D4C5B5;
+            --text-heading: #2B231D;
+            --text-body: #5C5046;
+            --text-muted: #8C7E73;
+            --brand-terracotta: #B85D34;
+            --brand-terracotta-hover: #9E4C27;
+            --brand-terracotta-soft: rgba(184, 93, 52, 0.08);
+            --brand-sand: #C89B6D;
+            --status-success: #3B6B35;
+            --status-success-bg: rgba(59, 107, 53, 0.08);
+            --status-success-border: rgba(59, 107, 53, 0.25);
+            --status-danger: #B93822;
+            --status-danger-bg: rgba(185, 56, 34, 0.08);
+            --status-danger-border: rgba(185, 56, 34, 0.25);
+            --status-amber: #B47B19;
+            --status-amber-bg: rgba(180, 123, 25, 0.08);
+            --status-amber-border: rgba(180, 123, 25, 0.25);
+            --shadow-soft: 0 4px 20px -2px rgba(43, 35, 29, 0.05);
+            --shadow-card: 0 6px 24px -4px rgba(43, 35, 29, 0.07);
+        }
+
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
-            font-family: 'Segoe UI', sans-serif;
-            background: #0f172a;
-            color: #e2e8f0;
+            font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: var(--bg-page);
+            color: var(--text-body);
             min-height: 100vh;
             display: flex;
             justify-content: center;
-            padding: 30px 15px;
+            padding: 36px 18px 72px;
         }
-        .container { max-width: 680px; width: 100%; }
 
-        h1 { font-size: 24px; margin-bottom: 20px; text-align: center; }
+        .container {
+            max-width: 760px;
+            width: 100%;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 28px;
+        }
+        .brand-eyebrow {
+            font-size: 11px;
+            letter-spacing: 0.16em;
+            text-transform: uppercase;
+            font-weight: 700;
+            color: var(--brand-terracotta);
+            margin-bottom: 6px;
+        }
+        .brand-title {
+            font-family: 'Playfair Display', Georgia, serif;
+            font-size: 28px;
+            font-weight: 600;
+            color: var(--text-heading);
+            letter-spacing: -0.01em;
+            margin-bottom: 6px;
+        }
+        .brand-desc {
+            font-size: 13px;
+            color: var(--text-muted);
+        }
 
         /* Tabs */
         .tabs {
             display: flex;
-            background: #1e293b;
-            border-radius: 12px;
-            padding: 6px;
-            margin-bottom: 20px;
-            gap: 6px;
+            background: var(--bg-subtle);
+            border: 1px solid var(--border-subtle);
+            border-radius: 10px;
+            padding: 4px;
+            margin-bottom: 24px;
+            gap: 4px;
         }
         .tab-btn {
             flex: 1;
-            padding: 12px;
+            padding: 10px 14px;
             background: transparent;
-            color: #94a3b8;
+            color: var(--text-muted);
             border: none;
             border-radius: 8px;
-            font-size: 15px;
+            font-size: 13px;
             font-weight: 600;
+            font-family: inherit;
             cursor: pointer;
             transition: all 0.2s;
         }
         .tab-btn.active {
-            background: #3b82f6;
-            color: #fff;
-            box-shadow: 0 2px 8px rgba(59, 130, 246, 0.4);
+            background: #FFFFFF;
+            color: var(--brand-terracotta);
+            box-shadow: var(--shadow-soft);
         }
 
         .card {
-            background: #1e293b;
-            border-radius: 12px;
-            padding: 24px;
-            margin-bottom: 20px;
-            border: 1px solid #334155;
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 14px;
+            padding: 28px;
+            margin-bottom: 24px;
+            box-shadow: var(--shadow-soft);
         }
 
-        label { display: block; font-size: 14px; color: #94a3b8; margin-bottom: 6px; }
+        .card-title {
+            font-family: 'Playfair Display', Georgia, serif;
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--text-heading);
+            margin-bottom: 6px;
+        }
+        .card-sub {
+            font-size: 13px;
+            color: var(--text-muted);
+            line-height: 1.5;
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-heading);
+            margin-bottom: 8px;
+        }
 
         input[type="text"], select {
             width: 100%;
             padding: 12px 14px;
-            background: #0f172a;
-            border: 1px solid #334155;
             border-radius: 8px;
-            color: #f8fafc;
-            font-size: 15px;
+            border: 1px solid var(--border-subtle);
+            background-color: #FAFAFA;
+            color: var(--text-heading);
+            font-size: 14px;
+            font-family: inherit;
             outline: none;
-            margin-bottom: 15px;
-        }
-        input[type="text"]:focus, select:focus { border-color: #3b82f6; }
-
-        .btn {
-            display: block;
-            width: 100%;
-            padding: 14px;
-            background: #3b82f6;
-            color: #fff;
-            border: none;
-            border-radius: 10px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: background 0.2s;
-        }
-        .btn:hover { background: #2563eb; }
-        .btn:disabled { background: #475569; cursor: not-allowed; }
-        .btn-success { background: #16a34a; }
-        .btn-success:hover { background: #15803d; }
-
-        /* Grid upload 4 views */
-        .upload-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 12px;
             margin-bottom: 18px;
-        }
-        .upload-item {
-            background: #0f172a;
-            border: 2px dashed #334155;
-            border-radius: 10px;
-            padding: 14px;
-            text-align: center;
-            cursor: pointer;
-            position: relative;
             transition: border-color 0.2s;
         }
-        .upload-item:hover { border-color: #3b82f6; }
-        .upload-item.has-file { border-color: #22c55e; border-style: solid; }
-        .upload-title { font-size: 14px; font-weight: 600; margin-bottom: 6px; color: #cbd5e1; }
+        input[type="text"]:focus, select:focus {
+            background-color: #FFFFFF;
+            border-color: var(--brand-terracotta);
+            box-shadow: 0 0 0 3px var(--brand-terracotta-soft);
+        }
+
+        .upload-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 14px;
+            margin-bottom: 22px;
+        }
+        @media (max-width: 540px) {
+            .upload-grid { grid-template-columns: 1fr; }
+        }
+
+        .upload-item {
+            background-color: var(--bg-subtle);
+            border: 1px dashed var(--border-hover);
+            border-radius: 10px;
+            padding: 18px 14px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .upload-item:hover {
+            border-color: var(--brand-terracotta);
+            background-color: #FCFAF7;
+        }
+        .upload-item.has-file {
+            border-style: solid;
+            border-color: var(--brand-terracotta);
+            background-color: #FFF9F5;
+        }
+
+        .upload-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-heading);
+            margin-bottom: 4px;
+        }
+        .upload-hint {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
         .upload-preview {
-            width: 100%;
+            max-width: 100%;
             height: 100px;
             object-fit: contain;
+            margin-top: 10px;
             border-radius: 6px;
             display: none;
-            margin-top: 8px;
-            background: #1e293b;
-        }
-        .upload-hint { font-size: 12px; color: #64748b; }
-
-        /* Results / Status */
-        .info-box {
-            background: #0f172a;
-            border: 1px solid #334155;
-            border-radius: 8px;
-            padding: 12px 16px;
-            font-size: 13px;
-            color: #cbd5e1;
-            margin-top: 15px;
-            display: none;
-        }
-        .url-box {
-            background: #0f172a;
-            border: 1px solid #334155;
-            border-radius: 8px;
-            padding: 10px 14px;
-            font-size: 13px;
-            word-break: break-all;
-            color: #94a3b8;
-            margin-top: 10px;
         }
 
-        #qr-section { display: none; text-align: center; }
-        #qr-section img { width: 260px; height: 260px; margin: 16px auto; border-radius: 12px; }
-
-        .view-row {
-            display: flex;
+        .btn {
+            display: inline-flex;
             align-items: center;
-            gap: 10px;
-            padding: 10px 0;
-            border-bottom: 1px solid #334155;
-        }
-        .view-row:last-child { border-bottom: none; }
-        .dot {
-            width: 12px; height: 12px;
-            border-radius: 50%;
-            flex-shrink: 0;
-        }
-        .dot.pending { background: #475569; }
-        .dot.uploaded { background: #22c55e; }
-        .view-label { flex: 1; font-size: 14px; }
-        .view-status { font-size: 12px; color: #64748b; }
-
-        .complete-banner {
-            background: #166534;
-            border-radius: 10px;
-            padding: 16px;
-            text-align: center;
+            justify-content: center;
+            width: 100%;
+            padding: 12px 22px;
+            border-radius: 8px;
+            font-size: 14px;
             font-weight: 600;
-            margin-top: 16px;
+            font-family: inherit;
+            cursor: pointer;
+            border: none;
+            transition: background-color 0.2s;
+            text-decoration: none;
+        }
+        .btn-primary {
+            background-color: var(--brand-terracotta);
+            color: #FFFFFF;
+        }
+        .btn-primary:hover {
+            background-color: var(--brand-terracotta-hover);
+        }
+        .btn-secondary {
+            background-color: var(--bg-subtle);
+            border: 1px solid var(--border-subtle);
+            color: var(--text-heading);
+        }
+        .btn-secondary:hover {
+            border-color: var(--brand-terracotta);
+            color: var(--brand-terracotta);
         }
 
-        /* Ghost image previews */
+        .info-box {
+            display: none;
+            padding: 14px;
+            border-radius: 8px;
+            font-size: 13px;
+            line-height: 1.5;
+            margin-top: 16px;
+            background-color: var(--bg-subtle);
+            border: 1px solid var(--border-subtle);
+            color: var(--text-body);
+        }
+
+        /* Ghost Preview Grid */
         .ghost-preview-grid {
             display: grid;
             grid-template-columns: repeat(4, 1fr);
-            gap: 8px;
-            margin-top: 15px;
+            gap: 10px;
+            margin-top: 14px;
+        }
+        @media (max-width: 540px) {
+            .ghost-preview-grid { grid-template-columns: repeat(2, 1fr); }
         }
         .ghost-card {
-            background: #0f172a;
+            background: #FFFFFF;
+            border: 1px solid var(--border-subtle);
             border-radius: 8px;
             padding: 8px;
             text-align: center;
         }
         .ghost-card img {
             width: 100%;
-            height: 80px;
+            height: 90px;
             object-fit: contain;
-            border-radius: 4px;
-            background: #1e293b;
         }
-        .ghost-card span { font-size: 11px; color: #94a3b8; display: block; margin-top: 4px; }
+        .ghost-card span {
+            font-size: 11px;
+            color: var(--text-muted);
+            display: block;
+            margin-top: 4px;
+            text-transform: uppercase;
+            font-weight: 600;
+        }
+
+        /* QR Section */
+        #qr-section {
+            display: none;
+            text-align: center;
+        }
+        #qr-img {
+            max-width: 190px;
+            margin: 16px auto;
+            border-radius: 8px;
+            border: 1px solid var(--border-subtle);
+            padding: 8px;
+            background: #FFFFFF;
+            display: block;
+        }
+        .url-box {
+            font-family: monospace;
+            font-size: 11px;
+            color: var(--brand-terracotta);
+            word-break: break-all;
+            background: var(--bg-subtle);
+            padding: 8px 12px;
+            border-radius: 6px;
+            border: 1px solid var(--border-subtle);
+            margin-top: 10px;
+        }
+
+        /* Views List */
+        .view-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 14px;
+            border-radius: 8px;
+            background: var(--bg-subtle);
+            border: 1px solid var(--border-subtle);
+            margin-bottom: 8px;
+            font-size: 13px;
+        }
+        .view-row .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 12px;
+        }
+        .view-row .dot.pending {
+            background-color: var(--status-amber);
+        }
+        .view-row .dot.uploaded {
+            background-color: var(--status-success);
+        }
+        .view-title-group {
+            display: flex;
+            align-items: center;
+            flex: 1;
+        }
+
+        .complete-banner {
+            background-color: var(--status-success-bg);
+            border: 1px solid var(--status-success-border);
+            border-radius: 10px;
+            padding: 18px;
+            text-align: center;
+            margin-top: 16px;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>📦 Hệ Thống Kiểm Tra Sản Phẩm</h1>
+        <header class="header">
+            <div class="brand-eyebrow">Engineering Lab &bull; Computer Vision</div>
+            <h1 class="brand-title">Artisan Model Workbench</h1>
+            <p class="brand-desc">Configure reference vase profiles, generate silhouettes, and simulate return inspections.</p>
+        </header>
 
         <!-- Navigation Tabs -->
         <div class="tabs">
             <button class="tab-btn active" id="tab-upload-btn" onclick="switchTab('upload')">
-                📤 1. Tải Lên Ảnh Gốc (Admin)
+                1. Upload Reference Models
             </button>
             <button class="tab-btn" id="tab-qr-btn" onclick="switchTab('qr')">
-                📱 2. Khách Trả Hàng & Quét QR
+                2. Test Inspection Session &amp; QR
             </button>
         </div>
 
-        <!-- ══════════════ TAB 1: UPLOAD ẢNH GỐC SẢN PHẨM ══════════════ -->
+        <!-- TAB 1: UPLOAD REFERENCE PROFILE -->
         <div id="tab-upload-content">
             <div class="card">
-                <h2 style="font-size:18px; margin-bottom:12px;">📤 Tải Ảnh Gốc 4 Góc & Tạo Bóng Mờ Tự Động</h2>
-                <p style="font-size:13px; color:#94a3b8; margin-bottom:18px;">
-                    Ảnh tải lên sẽ được AI (rembg) tự động tách nền trong suốt và crop sát viền để làm lớp phủ bóng mờ (ghost image) cho điện thoại khi khách chụp.
+                <h2 class="card-title">Upload 4-Angle Reference Standard</h2>
+                <p class="card-sub">
+                    Uploaded reference frames are processed through RemBG to isolate transparent silhouettes (ghost overlays) and register manufacturing benchmarks.
                 </p>
 
-                <label for="upload-product-id">Mã sản phẩm (Product ID):</label>
-                <input type="text" id="upload-product-id" placeholder="Ví dụ: 1, 2, BinhHoa01..." value="1">
+                <label for="upload-product-id">Product Reference SKU (Model ID):</label>
+                <input type="text" id="upload-product-id" placeholder="e.g. B22, B1, Vase01..." value="B22">
 
                 <div class="upload-grid">
-                    <!-- Trước -->
-                    <div class="upload-item" onclick="document.getElementById('file-truoc').click()">
-                        <div class="upload-title">🔵 Mặt Trước</div>
-                        <div class="upload-hint" id="hint-truoc">Bấm chọn ảnh...</div>
-                        <img class="upload-preview" id="prev-truoc">
-                        <input type="file" id="file-truoc" accept="image/*" style="display:none" onchange="previewFile('truoc')">
+                    <div class="upload-item" onclick="document.getElementById('file-front').click()">
+                        <div class="upload-title">Front View</div>
+                        <div class="upload-hint" id="hint-front">Click to select image...</div>
+                        <img class="upload-preview" id="prev-front">
+                        <input type="file" id="file-front" accept="image/*" style="display:none" onchange="previewFile('front')">
                     </div>
-                    <!-- Sau -->
-                    <div class="upload-item" onclick="document.getElementById('file-sau').click()">
-                        <div class="upload-title">🔵 Mặt Sau</div>
-                        <div class="upload-hint" id="hint-sau">Bấm chọn ảnh...</div>
-                        <img class="upload-preview" id="prev-sau">
-                        <input type="file" id="file-sau" accept="image/*" style="display:none" onchange="previewFile('sau')">
+                    <div class="upload-item" onclick="document.getElementById('file-back').click()">
+                        <div class="upload-title">Back View</div>
+                        <div class="upload-hint" id="hint-back">Click to select image...</div>
+                        <img class="upload-preview" id="prev-back">
+                        <input type="file" id="file-back" accept="image/*" style="display:none" onchange="previewFile('back')">
                     </div>
-                    <!-- Trái -->
-                    <div class="upload-item" onclick="document.getElementById('file-trai').click()">
-                        <div class="upload-title">🔵 Mặt Trái</div>
-                        <div class="upload-hint" id="hint-trai">Bấm chọn ảnh...</div>
-                        <img class="upload-preview" id="prev-trai">
-                        <input type="file" id="file-trai" accept="image/*" style="display:none" onchange="previewFile('trai')">
+                    <div class="upload-item" onclick="document.getElementById('file-left').click()">
+                        <div class="upload-title">Left View</div>
+                        <div class="upload-hint" id="hint-left">Click to select image...</div>
+                        <img class="upload-preview" id="prev-left">
+                        <input type="file" id="file-left" accept="image/*" style="display:none" onchange="previewFile('left')">
                     </div>
-                    <!-- Phải -->
-                    <div class="upload-item" onclick="document.getElementById('file-phai').click()">
-                        <div class="upload-title">🔵 Mặt Phải</div>
-                        <div class="upload-hint" id="hint-phai">Bấm chọn ảnh...</div>
-                        <img class="upload-preview" id="prev-phai">
-                        <input type="file" id="file-phai" accept="image/*" style="display:none" onchange="previewFile('phai')">
+                    <div class="upload-item" onclick="document.getElementById('file-right').click()">
+                        <div class="upload-title">Right View</div>
+                        <div class="upload-hint" id="hint-right">Click to select image...</div>
+                        <img class="upload-preview" id="prev-right">
+                        <input type="file" id="file-right" accept="image/*" style="display:none" onchange="previewFile('right')">
                     </div>
                 </div>
 
-                <button class="btn btn-success" id="upload-btn" onclick="uploadProductImages()">
-                    🚀 Bắt Đầu Tách Nền & Tạo Bóng Mờ Tự Động
+                <button class="btn btn-primary" id="upload-btn" onclick="uploadProductImages()">
+                    Process &amp; Generate Ghost Silhouettes
                 </button>
 
                 <div class="info-box" id="upload-status-box"></div>
 
-                <!-- Preview Ghost Images Generated -->
-                <div id="ghost-results-section" style="display:none; margin-top:20px;">
-                    <h3 style="font-size:15px; color:#22c55e;">✅ Đã tạo thành công bóng mờ (Ghost Images):</h3>
+                <!-- Ghost Previews -->
+                <div id="ghost-results-section" style="display:none; margin-top:24px;">
+                    <h3 style="font-size:14px; color:var(--status-success); font-weight:700; text-transform:uppercase; letter-spacing:0.05em;">Generated Ghost Silhouettes:</h3>
                     <div class="ghost-preview-grid" id="ghost-preview-grid"></div>
-                    <button class="btn" style="margin-top:15px;" onclick="goToQRTab()">
-                        👉 Tạo mã QR trả hàng cho sản phẩm này ngay
+                    <button class="btn btn-secondary" style="margin-top:16px;" onclick="goToQRTab()">
+                        Create Inspection QR for this Model
                     </button>
                 </div>
             </div>
         </div>
 
-        <!-- ══════════════ TAB 2: KHÁCH TRẢ HÀNG & QUÉT QR ══════════════ -->
+        <!-- TAB 2: TEST INSPECTION SESSION -->
         <div id="tab-qr-content" style="display:none;">
-            <!-- Step 1: Chọn sản phẩm -->
             <div class="card" id="form-section">
-                <label for="product-id">Chọn mã sản phẩm cần trả hàng:</label>
-                <input type="text" id="product-id" list="existing-products" placeholder="Ví dụ: 1" value="1">
-                <datalist id="existing-products"></datalist>
+                <label for="product-id">Select Reference Vase Profile:</label>
+                <div style="display:flex; gap:10px; margin-bottom:16px;">
+                    <select id="product-id" style="flex:1; margin-bottom:0;">
+                        <option value="B22">B22 (Artisan Pentachrome Vase)</option>
+                        <option value="B1">B1 (Cobalt Glaze Vase)</option>
+                    </select>
+                    <button type="button" onclick="loadExistingProducts()" class="btn-secondary" style="width:auto; padding:0 16px; border-radius:8px;">Refresh</button>
+                </div>
 
-                <button class="btn" id="create-btn" onclick="createSession()">
-                    📱 Tạo QR để chụp ảnh trả hàng
+                <button class="btn btn-primary" id="create-btn" onclick="createSession()">
+                    Generate Mobile Inspection QR
                 </button>
             </div>
 
-            <!-- Step 2: Hiện QR -->
+            <!-- QR Display -->
             <div class="card" id="qr-section">
-                <h2 style="font-size:18px; margin-bottom:8px;">📱 Quét mã QR bằng điện thoại</h2>
-                <p style="font-size:13px; color:#94a3b8;">
-                    Mở camera điện thoại → quét mã bên dưới → camera tự mở đúng bóng mờ sản phẩm này
+                <h2 class="card-title">Mobile Camera Scan</h2>
+                <p class="card-sub">
+                    Scan with a mobile camera to test the guided 4-angle silhouette alignment viewfinder.
                 </p>
-                <img id="qr-img" alt="QR Code">
+                <img id="qr-img" alt="Inspection QR Code">
                 <div class="url-box" id="capture-url"></div>
             </div>
 
-            <!-- Step 3: Trạng thái -->
+            <!-- Live Status -->
             <div class="card" id="status-section" style="display:none;">
-                <h2 style="font-size:16px; margin-bottom:12px;">📊 Tiến độ chụp ảnh trên điện thoại</h2>
-                <div id="views-list"></div>
-                <div id="complete-msg" class="complete-banner" style="display:none;">
-                    ✅ Đã chụp đủ 4 góc! Sẵn sàng phân tích khuyết tật.
-                </div>
+                <h2 class="card-title">Live Mobile Capture Progress</h2>
+                <div id="views-list" style="margin: 16px 0;"></div>
+                <div id="complete-msg" class="complete-banner" style="display:none;"></div>
             </div>
         </div>
     </div>
@@ -304,7 +456,6 @@
         let currentSessionId = null;
         let pollTimer = null;
 
-        // Switch tabs
         function switchTab(tab) {
             const isUpload = tab === 'upload';
             document.getElementById('tab-upload-content').style.display = isUpload ? 'block' : 'none';
@@ -325,7 +476,6 @@
             createSession();
         }
 
-        // Preview local image file on select
         function previewFile(view) {
             const fileInput = document.getElementById(`file-${view}`);
             const preview = document.getElementById(`prev-${view}`);
@@ -338,22 +488,21 @@
                 reader.onload = function(e) {
                     preview.src = e.target.result;
                     preview.style.display = 'block';
-                    hint.textContent = `Đã chọn: ${file.name.substring(0, 15)}...`;
+                    hint.textContent = `Selected: ${file.name.substring(0, 16)}...`;
                     item.classList.add('has-file');
                 };
                 reader.readAsDataURL(file);
             }
         }
 
-        // Upload Product Original Images
         async function uploadProductImages() {
             const productId = document.getElementById('upload-product-id').value.trim();
             if (!productId) {
-                alert('Vui lòng nhập Mã sản phẩm (Product ID)');
+                alert('Please enter a Product Reference SKU');
                 return;
             }
 
-            const views = ['truoc', 'sau', 'trai', 'phai'];
+            const views = ['front', 'back', 'left', 'right'];
             const formData = new FormData();
             formData.append('product_id', productId);
 
@@ -367,7 +516,7 @@
             });
 
             if (!hasAnyFile) {
-                alert('Vui lòng chọn ít nhất 1 ảnh góc sản phẩm!');
+                alert('Please select at least 1 view image to upload.');
                 return;
             }
 
@@ -377,9 +526,9 @@
             const ghostGrid = document.getElementById('ghost-preview-grid');
 
             btn.disabled = true;
-            btn.textContent = '⏳ AI đang bóc nền & xử lý (vui lòng chờ)...';
+            btn.textContent = 'AI is segmenting background & extracting silhouettes...';
             statusBox.style.display = 'block';
-            statusBox.innerHTML = '🔄 Đang tải lên và chạy AI rembg để tạo bóng mờ...';
+            statusBox.innerHTML = 'Executing RemBG segmentation and silhouette generation...';
             ghostSec.style.display = 'none';
 
             try {
@@ -390,71 +539,66 @@
                 const data = await res.json();
 
                 if (data.status === 'ok') {
-                    statusBox.innerHTML = `✅ Đã xử lý thành công <b>${data.processed_count}</b> góc sản phẩm cho Product ID: <b>${data.product_id}</b>`;
+                    statusBox.innerHTML = `Successfully processed <b>${data.processed_count}</b> view(s) for Model: <b>${data.product_id}</b>`;
                     ghostGrid.innerHTML = '';
 
-                    const labels = {truoc:'Trước', sau:'Sau', trai:'Trái', phai:'Phải'};
+                    const labels = {front:'Front', back:'Back', left:'Left', right:'Right', truoc:'Front', sau:'Back', trai:'Left', phai:'Right'};
                     for (const [view, info] of Object.entries(data.results)) {
                         if (info.status === 'ok') {
                             const card = document.createElement('div');
                             card.className = 'ghost-card';
                             card.innerHTML = `
-                                <img src="${info.ghost_local}?t=${Date.now()}" alt="${labels[view]}">
-                                <span>${labels[view]} (Bóng mờ)</span>
+                                <img src="${info.ghost_local}?t=${Date.now()}" alt="${labels[view] || view}">
+                                <span>${labels[view] || view}</span>
                             `;
                             ghostGrid.appendChild(card);
                         }
                     }
                     ghostSec.style.display = 'block';
                 } else {
-                    let errMsg = data.error || '';
-                    if (data.results) {
-                        const errViews = Object.entries(data.results)
-                            .filter(([_, info]) => info.status === 'error')
-                            .map(([v, info]) => `${v}: ${info.message}`);
-                        if (errViews.length > 0) {
-                            errMsg += (errMsg ? ' - ' : '') + errViews.join(' | ');
-                        }
-                    }
-                    statusBox.innerHTML = `❌ Lỗi: ${errMsg || 'Không có ảnh nào được xử lý'}`;
+                    statusBox.innerHTML = `Error: ${data.error || 'Failed to process images'}`;
                 }
             } catch (err) {
-                statusBox.innerHTML = `❌ Lỗi kết nối: ${err.message}`;
+                statusBox.innerHTML = `Connection error: ${err.message}`;
             } finally {
                 btn.disabled = false;
-                btn.textContent = '🚀 Bắt Đầu Tách Nền & Tạo Bóng Mờ Tự Động';
+                btn.textContent = 'Process & Generate Ghost Silhouettes';
                 loadExistingProducts();
             }
         }
 
-        // Load existing products for datalist
         async function loadExistingProducts() {
             try {
                 const res = await fetch('/api/products');
                 const data = await res.json();
-                const datalist = document.getElementById('existing-products');
-                datalist.innerHTML = '';
+                const sel = document.getElementById('product-id');
                 if (data.products && data.products.length > 0) {
+                    const currentVal = sel.value;
+                    sel.innerHTML = '';
                     data.products.forEach(p => {
                         const opt = document.createElement('option');
                         opt.value = p.id;
-                        opt.label = `${p.id} (${p.views.join(', ')})`;
-                        datalist.appendChild(opt);
+                        opt.textContent = `${p.id} (${p.total_views} views: ${p.views.join(', ')})`;
+                        sel.appendChild(opt);
                     });
+                    if (currentVal && Array.from(sel.options).some(o => o.value === currentVal)) {
+                        sel.value = currentVal;
+                    } else if (Array.from(sel.options).some(o => o.value === 'B22')) {
+                        sel.value = 'B22';
+                    }
                 }
             } catch (e) {
                 console.warn('Cannot load products:', e);
             }
         }
 
-        // Return session & QR creation
         async function createSession() {
             const productId = document.getElementById('product-id').value.trim();
-            if (!productId) { alert('Nhập mã sản phẩm'); return; }
+            if (!productId) { alert('Please select a product model'); return; }
 
             const btn = document.getElementById('create-btn');
             btn.disabled = true;
-            btn.textContent = '⏳ Đang tạo...';
+            btn.textContent = 'Generating Session...';
 
             try {
                 const form = new FormData();
@@ -465,40 +609,51 @@
 
                 currentSessionId = data.session_id;
 
-                // Hiện QR
                 document.getElementById('qr-img').src = data.qr_base64;
                 document.getElementById('capture-url').textContent = data.capture_url;
                 document.getElementById('qr-section').style.display = 'block';
 
-                // Hiện status
                 document.getElementById('status-section').style.display = 'block';
                 renderViews({});
 
-                // Bắt đầu polling
                 startPolling();
-
-                btn.textContent = '✅ Đã tạo QR';
+                btn.textContent = 'QR Session Active';
             } catch (e) {
-                alert('Lỗi: ' + e.message);
+                alert('Session creation error: ' + e.message);
                 btn.disabled = false;
-                btn.textContent = '📱 Tạo QR để chụp ảnh trả hàng';
+                btn.textContent = 'Generate Mobile Inspection QR';
             }
         }
 
         function renderViews(views) {
-            const labels = {truoc:'Mặt Trước', sau:'Mặt Sau', trai:'Mặt Trái', phai:'Mặt Phải'};
+            const viewDefs = [
+                { id: 'front', label: 'Front View', aliases: ['front', 'truoc'] },
+                { id: 'back',  label: 'Back View',   aliases: ['back', 'sau'] },
+                { id: 'left',  label: 'Left View',  aliases: ['left', 'trai'] },
+                { id: 'right', label: 'Right View',  aliases: ['right', 'phai'] },
+            ];
             const list = document.getElementById('views-list');
             list.innerHTML = '';
 
-            for (const [key, label] of Object.entries(labels)) {
-                if (Object.keys(views).length > 0 && !(key in views)) continue;
-                const info = views[key] || {status:'pending'};
+            for (const v of viewDefs) {
+                let info = { status: 'pending' };
+                for (const alias of v.aliases) {
+                    if (views && views[alias]) {
+                        info = views[alias];
+                        break;
+                    }
+                }
+                const isUploaded = info.status === 'uploaded';
                 const row = document.createElement('div');
                 row.className = 'view-row';
                 row.innerHTML = `
-                    <div class="dot ${info.status}"></div>
-                    <span class="view-label">${label}</span>
-                    <span class="view-status">${info.status === 'uploaded' ? '✅ Đã chụp' : '⏳ Chờ...'}</span>
+                    <div class="view-title-group">
+                        <div class="dot ${isUploaded ? 'uploaded' : 'pending'}"></div>
+                        <span style="font-weight:600; color:var(--text-heading);">${v.label}</span>
+                    </div>
+                    <span style="font-weight:600; font-size:12px; color:${isUploaded ? 'var(--status-success)' : 'var(--text-muted)'};">
+                        ${isUploaded ? 'UPLOADED' : 'AWAITING CAPTURE'}
+                    </span>
                 `;
                 list.appendChild(row);
             }
@@ -520,27 +675,43 @@
                     }
 
                     if (data.status === 'complete') {
-                        clearInterval(pollTimer);
-
-                        // Hiện nút xem kết quả + tự mở trang result
                         const completeEl = document.getElementById('complete-msg');
-                        completeEl.innerHTML = `
-                            <div style="color:#22c55e;font-size:18px;font-weight:700;margin-bottom:12px;">
-                                🎉 Đã chụp xong ảnh trả hàng!
-                            </div>
-                            <a href="/result/${currentSessionId}" target="_blank"
-                               style="display:inline-block;padding:12px 28px;background:#3b82f6;
-                                      color:#fff;border-radius:10px;font-size:15px;font-weight:700;
-                                      text-decoration:none;">
-                                📊 Xem Kết Quả &amp; So Sánh Ảnh →
-                            </a>
-                        `;
                         completeEl.style.display = 'block';
 
-                        // Tự mở sau 1 giây (delay nhỏ để server kịp render)
-                        setTimeout(() => {
-                            window.open(`/result/${currentSessionId}`, '_blank');
-                        }, 1000);
+                        const pipeStatus = data.pipeline_status || 'queued';
+                        const pipeStep = data.pipeline_step || 'Analysis in progress...';
+
+                        if (pipeStatus === 'queued' || pipeStatus === 'preprocessing' || pipeStatus === 'inspecting') {
+                            completeEl.innerHTML = `
+                                <div style="color:var(--brand-terracotta); font-size:15px; font-weight:700; margin-bottom:6px;">
+                                    All 4 Angles Captured &bull; Inspection Pipeline Executing
+                                </div>
+                                <div style="font-size:13px; color:var(--text-muted);">${pipeStep}</div>
+                            `;
+                        } else if (pipeStatus === 'ready') {
+                            clearInterval(pollTimer);
+                            completeEl.innerHTML = `
+                                <div style="color:var(--status-success); font-size:16px; font-weight:700; margin-bottom:12px;">
+                                    Inspection Complete
+                                </div>
+                                <a href="/result/${currentSessionId}" target="_blank" class="btn btn-primary" style="width:auto; display:inline-flex; padding:10px 24px;">
+                                    View Full Forensic Report
+                                </a>
+                            `;
+                            setTimeout(() => {
+                                window.open(`/result/${currentSessionId}`, '_blank');
+                            }, 1200);
+                        } else if (pipeStatus === 'error') {
+                            clearInterval(pollTimer);
+                            completeEl.innerHTML = `
+                                <div style="color:var(--status-danger); font-size:14px; font-weight:700; margin-bottom:8px;">
+                                    ${pipeStep}
+                                </div>
+                                <a href="/result/${currentSessionId}" target="_blank" class="btn btn-secondary" style="width:auto; display:inline-flex;">
+                                    Open Inspection Report
+                                </a>
+                            `;
+                        }
                     }
                 } catch (e) {
                     console.error('Poll error:', e);

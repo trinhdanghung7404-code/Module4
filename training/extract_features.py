@@ -72,6 +72,60 @@ def bbox_to_patch_indices(
     return patch_indices
 
 
+def inject_specular_glare(
+    rgb_448: np.ndarray,
+    alpha_448: np.ndarray,
+    defect_bbox_448: Tuple[int, int, int, int]
+) -> Tuple[np.ndarray, List[int]]:
+    """
+    Cấy 1 đốm lóa sáng quang học (Specular Glare) tại vùng men lành làm Hard Negative (Nhãn 0).
+    Trả về ảnh đã cấy lóa và danh sách index các patch 14x14 của đốm lóa.
+    """
+    dbx, dby, dbw, dbh = defect_bbox_448
+    defect_cx, defect_cy = dbx + dbw // 2, dby + dbh // 2
+
+    # Tìm các điểm men lành cách xa vết lỗi ít nhất 80px
+    y_idxs, x_idxs = np.where(alpha_448 > 0.85)
+    if len(y_idxs) == 0:
+        return rgb_448, []
+
+    dists = np.sqrt((x_idxs - defect_cx)**2 + (y_idxs - defect_cy)**2)
+    safe_mask = dists > 80
+    if not np.any(safe_mask):
+        return rgb_448, []
+
+    safe_indices = np.where(safe_mask)[0]
+    pick = random.choice(safe_indices)
+    gx, gy = int(x_idxs[pick]), int(y_idxs[pick])
+
+    # Kích thước đốm lóa elip quang học
+    rx = random.randint(18, 30)
+    ry = random.randint(12, 22)
+    glare_peak = random.uniform(170.0, 240.0)
+
+    y_grid, x_grid = np.ogrid[:448, :448]
+    blob_dist = ((x_grid - gx) / rx)**2 + ((y_grid - gy) / ry)**2
+    glare_intensity = np.exp(-0.5 * blob_dist) * glare_peak
+    glare_intensity[blob_dist > 9.0] = 0.0
+
+    # Hòa trộn ánh sáng vào men gốm
+    glare_rgb = np.clip(
+        rgb_448.astype(np.float32) + glare_intensity[:, :, None] * alpha_448[:, :, None],
+        0.0, 255.0
+    ).astype(np.uint8)
+
+    # Lấy các patch 14x14 bao trùm vùng tâm đốm lóa
+    grid_size = 32
+    c_center = max(0, min(grid_size - 1, gx // 14))
+    r_center = max(0, min(grid_size - 1, gy // 14))
+
+    glare_patches = [r_center * grid_size + c_center]
+    if rx > 20 and c_center + 1 < grid_size:
+        glare_patches.append(r_center * grid_size + (c_center + 1))
+
+    return glare_rgb, glare_patches
+
+
 def prepare_rgb_image(im_path: str, target_size: int = 448) -> Tuple[np.ndarray, np.ndarray]:
     """Đọc ảnh RGBA và đặt lên nền xám trung tính 128"""
     im = cv2.imread(im_path, cv2.IMREAD_UNCHANGED)
@@ -136,6 +190,12 @@ def extract_features_dataset(
         except Exception:
             continue
 
+        # Chuyển đổi tọa độ bbox sang không gian 448
+        scale_x = 448.0 / float(img_w)
+        scale_y = 448.0 / float(img_h)
+        bbox_448 = (int(bbox[0] * scale_x), int(bbox[1] * scale_y), int(bbox[2] * scale_x), int(bbox[3] * scale_y))
+
+        # Trích xuất trực tiếp đặc trưng vi sai DINOv2 từ ảnh khuyết tật và ảnh đối chứng
         t_syn = transform(syn_rgb).unsqueeze(0).to(device)
         t_ref = transform(ref_rgb).unsqueeze(0).to(device)
 
@@ -157,13 +217,16 @@ def extract_features_dataset(
             all_features.append(delta_f[p_idx])
             all_labels.append(class_id)
 
-        # 2. Lấy mẫu âm (Men lành - Nhãn 0): 100% bên trong thân bình theo kênh Alpha
+        # 2. Lấy mẫu đối chứng Men lành (Clean Normal - Nhãn 0):
+        # Chọn các patch bên trong thân bình (alpha > 0.85) và không trùng với vùng khuyết tật
         grid_alpha = cv2.resize(syn_alpha, (32, 32), interpolation=cv2.INTER_AREA).flatten()
-        defect_set = set(defect_patch_idxs)
-        candidate_normals = [idx for idx in range(1024) if (grid_alpha[idx] > 0.85 and idx not in defect_set)]
+        exclude_set = set(defect_patch_idxs)
+        candidate_normals = [idx for idx in range(1024) if (grid_alpha[idx] > 0.85 and idx not in exclude_set)]
 
         if candidate_normals:
-            sampled_negatives = random.sample(candidate_normals, min(negative_samples_per_image, len(candidate_normals)))
+            # Lấy 1 hoặc 2 mẫu mỗi ảnh để tổng số mẫu Nhãn 0 đạt đúng ~608 mẫu (cân bằng hoàn hảo 1:1:1:1 với 3 lớp lỗi)
+            num_to_sample = 2 if i < 152 else 1
+            sampled_negatives = random.sample(candidate_normals, min(num_to_sample, len(candidate_normals)))
             for neg_idx in sampled_negatives:
                 all_features.append(delta_f[neg_idx])
                 all_labels.append(0)  # Nhãn 0: Normal

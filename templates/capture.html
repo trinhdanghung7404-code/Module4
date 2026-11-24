@@ -1,41 +1,78 @@
 <!DOCTYPE html>
-<html lang="vi">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Chụp Ảnh Trả Hàng Tự Động</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Artisan Return Inspection — Gốm Mộc</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --bg-hud: rgba(26, 22, 20, 0.90);
+            --bg-panel: #1A1614;
+            --border-hud: rgba(232, 223, 213, 0.15);
+            --text-ivory: #FAF6F0;
+            --text-muted: #A3968A;
+            --brand-terracotta: #B85D34;
+            --brand-sand: #C89B6D;
+            --status-success: #3B6B35;
+            --status-danger: #B93822;
+        }
+
         * { box-sizing: border-box; margin: 0; padding: 0; }
+        html, body {
+            width: 100%;
+            height: 100%;
+            height: 100vh;
+            height: 100dvh;
+            height: var(--app-height, 100dvh);
+            min-height: -webkit-fill-available;
+            overflow: hidden;
+            position: fixed;
+            inset: 0;
+        }
         body {
             background: #000;
-            color: #fff;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            height: 100vh;
-            overflow: hidden;
+            color: var(--text-ivory);
+            font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             display: flex;
             flex-direction: column;
         }
 
         /* Top Header */
         .header {
-            padding: 12px 16px;
-            background: rgba(15, 23, 42, 0.85);
-            backdrop-filter: blur(8px);
+            padding: 14px 18px;
+            background: var(--bg-hud);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--border-hud);
             display: flex;
             align-items: center;
             justify-content: space-between;
             z-index: 30;
         }
-        .header-title { font-size: 15px; font-weight: 700; color: #38bdf8; }
-        .progress-dots { display: flex; gap: 8px; }
-        .pdot {
-            width: 10px; height: 10px;
-            border-radius: 50%;
-            background: #334155;
-            transition: all 0.3s;
+        .header-title {
+            font-family: 'Playfair Display', Georgia, serif;
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text-ivory);
+            letter-spacing: 0.02em;
         }
-        .pdot.done { background: #22c55e; }
-        .pdot.current { background: #38bdf8; box-shadow: 0 0 8px #38bdf8; transform: scale(1.1); }
+        .progress-dots { display: flex; gap: 8px; align-items: center; }
+        .pdot {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            background: rgba(232, 223, 213, 0.25);
+            transition: all 0.25s ease;
+        }
+        .pdot.done {
+            background: var(--status-success);
+        }
+        .pdot.current {
+            background: var(--brand-terracotta);
+            box-shadow: 0 0 8px rgba(184, 93, 52, 0.8);
+            transform: scale(1.25);
+        }
 
         /* Camera Viewport */
         .camera-area {
@@ -50,33 +87,33 @@
             object-fit: cover;
         }
 
-        /* Target Framing Box (Khung canh bình) */
+        /* Target Framing Box */
         .target-box {
             position: absolute;
             top: 50%; left: 50%;
             transform: translate(-50%, -50%);
             width: 74%;
             height: 70%;
-            border: 2px dashed rgba(255, 255, 255, 0.35);
-            border-radius: 20px;
+            border: 2px dashed rgba(250, 246, 240, 0.4);
+            border-radius: 18px;
             pointer-events: none;
             z-index: 12;
             transition: border-color 0.25s, box-shadow 0.25s, transform 0.15s ease-out;
         }
         .target-box.aligning {
-            border-color: #facc15;
+            border-color: var(--brand-sand);
             border-style: solid;
-            box-shadow: 0 0 15px rgba(250, 204, 21, 0.3);
+            box-shadow: 0 0 16px rgba(200, 155, 109, 0.35);
         }
         .target-box.locked {
-            border-color: #22c55e;
+            border-color: var(--status-success);
             border-style: solid;
-            box-shadow: 0 0 25px rgba(34, 197, 94, 0.6);
+            box-shadow: 0 0 24px rgba(59, 107, 53, 0.65);
         }
         .target-box.error {
-            border-color: #ef4444;
+            border-color: var(--status-danger);
             border-style: solid;
-            box-shadow: 0 0 25px rgba(239, 68, 68, 0.7);
+            box-shadow: 0 0 24px rgba(185, 56, 34, 0.7);
         }
 
         /* Ghost Image Overlay */
@@ -99,17 +136,25 @@
         .guide-bar {
             position: absolute;
             bottom: 0; left: 0; right: 0;
-            padding: 16px 20px 24px 20px;
-            background: linear-gradient(transparent, rgba(15, 23, 42, 0.95) 40%, rgba(15, 23, 42, 1));
-            z-index: 20;
+            padding: 12px 16px;
+            padding-bottom: max(20px, calc(env(safe-area-inset-bottom, 0px) + 16px));
+            background: linear-gradient(transparent, rgba(26, 22, 20, 0.85) 25%, rgba(26, 22, 20, 0.98) 70%, #1A1614);
+            z-index: 25;
             text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            pointer-events: auto;
         }
         #guide-text {
-            font-size: 16px;
-            font-weight: 600;
-            text-shadow: 0 2px 4px rgba(0,0,0,0.8);
-            min-height: 24px;
-            margin-bottom: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-ivory);
+            text-shadow: 0 2px 4px rgba(0,0,0,0.85);
+            min-height: 20px;
+            margin-bottom: 12px;
+            max-width: 90%;
+            letter-spacing: 0.01em;
         }
 
         /* Progress Bar (Hidden in manual mode) */
@@ -117,46 +162,78 @@
             display: none;
         }
 
-        /* Actions: Manual snap button */
+        /* Native iOS Camera Shutter Button */
         .bottom-actions {
             display: flex;
             justify-content: center;
             align-items: center;
-            gap: 16px;
+            width: 100%;
+            padding: 6px 0;
         }
-        .snap-btn {
-            background: linear-gradient(135deg, #0284c7, #0ea5e9);
-            border: 3px solid #ffffff;
-            color: #ffffff;
-            padding: 12px 28px;
-            border-radius: 30px;
-            font-size: 16px;
-            font-weight: 700;
+
+        .ios-shutter-btn {
+            width: 74px;
+            height: 74px;
+            border-radius: 50%;
+            border: 4px solid #FFFFFF;
+            background: transparent;
+            padding: 4px;
             cursor: pointer;
-            box-shadow: 0 4px 18px rgba(14, 165, 233, 0.45);
-            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            outline: none;
+            -webkit-tap-highlight-color: transparent;
+            touch-action: manipulation;
+            transition: transform 0.12s ease, opacity 0.15s ease;
+            box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45);
         }
-        .snap-btn:active {
-            background: #0369a1;
-            transform: scale(0.95);
+
+        .ios-shutter-btn:active {
+            transform: scale(0.93);
+        }
+
+        .ios-shutter-inner {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            background-color: #FFFFFF;
+            display: block;
+            transition: transform 0.12s ease, background-color 0.12s ease;
+        }
+
+        .ios-shutter-btn:active .ios-shutter-inner {
+            transform: scale(0.88);
+            background-color: #D8D2CA;
+        }
+
+        .ios-shutter-btn:disabled {
+            opacity: 0.4;
+            pointer-events: none;
         }
 
         /* Opacity control pill */
         .opacity-pill {
             position: absolute;
             top: 14px; right: 14px;
-            background: rgba(0,0,0,0.5);
+            background: rgba(26, 22, 20, 0.70);
+            border: 1px solid var(--border-hud);
+            backdrop-filter: blur(8px);
             border-radius: 20px;
-            padding: 4px 10px;
-            font-size: 12px;
+            padding: 5px 12px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-ivory);
             z-index: 25;
             display: flex;
             align-items: center;
-            gap: 6px;
+            gap: 8px;
         }
         .opacity-pill input {
             width: 60px;
-            accent-color: #38bdf8;
+            accent-color: var(--brand-terracotta);
         }
 
         /* Flash effect */
@@ -176,48 +253,114 @@
             display: none;
             position: absolute;
             inset: 0;
-            background: rgba(15, 23, 42, 0.92);
+            background: rgba(26, 22, 20, 0.94);
+            backdrop-filter: blur(8px);
             z-index: 40;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            gap: 14px;
+            gap: 16px;
             text-align: center;
-            padding: 20px;
+            padding: 24px;
         }
         #transition-screen.show { display: flex; }
-        .trans-check { font-size: 56px; }
-        .trans-done { font-size: 20px; font-weight: 700; color: #22c55e; }
-        .trans-next { font-size: 17px; color: #94a3b8; line-height: 1.4; }
-        .trans-countdown { font-size: 38px; font-weight: 800; color: #38bdf8; margin-top: 6px; }
+        .trans-badge {
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            padding: 4px 12px;
+            border-radius: 999px;
+            background: rgba(59, 107, 53, 0.15);
+            color: var(--status-success);
+            border: 1px solid rgba(59, 107, 53, 0.35);
+        }
+        .trans-done {
+            font-family: 'Playfair Display', Georgia, serif;
+            font-size: 22px;
+            font-weight: 600;
+            color: var(--text-ivory);
+        }
+        .trans-next {
+            font-size: 15px;
+            color: var(--text-muted);
+            line-height: 1.5;
+            max-width: 280px;
+        }
+        .trans-countdown {
+            font-family: 'Playfair Display', Georgia, serif;
+            font-size: 42px;
+            font-weight: 700;
+            color: var(--brand-sand);
+            margin-top: 8px;
+        }
 
         /* All done screen */
         #done-screen {
             display: none;
             position: absolute;
             inset: 0;
-            background: rgba(15, 23, 42, 0.95);
+            background: rgba(26, 22, 20, 0.96);
+            backdrop-filter: blur(10px);
             z-index: 50;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            gap: 16px;
+            gap: 18px;
             text-align: center;
-            padding: 20px;
+            padding: 28px;
         }
         #done-screen.show { display: flex; }
-        .done-icon { font-size: 64px; }
-        .done-text { font-size: 22px; font-weight: 700; color: #22c55e; }
-        .done-sub { font-size: 15px; color: #94a3b8; max-width: 300px; line-height: 1.5; }
+        .done-badge {
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            padding: 4px 14px;
+            border-radius: 999px;
+            background: rgba(59, 107, 53, 0.15);
+            color: var(--status-success);
+            border: 1px solid rgba(59, 107, 53, 0.35);
+        }
+        .done-title {
+            font-family: 'Playfair Display', Georgia, serif;
+            font-size: 26px;
+            font-weight: 600;
+            color: var(--text-ivory);
+            line-height: 1.3;
+        }
+        .done-sub {
+            font-size: 14px;
+            color: var(--text-muted);
+            max-width: 320px;
+            line-height: 1.6;
+        }
+        .btn-view-report {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background-color: var(--brand-terracotta);
+            color: #FFFFFF;
+            padding: 13px 26px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            text-decoration: none;
+            margin-top: 8px;
+            transition: opacity 0.2s;
+        }
+        .btn-view-report:active {
+            opacity: 0.9;
+        }
     </style>
 </head>
 <body>
 
     <!-- Header -->
-    <div class="header">
-        <span class="header-title" id="view-title">Mặt Trước</span>
+    <header class="header">
+        <span class="header-title" id="view-title">Front View</span>
         <div class="progress-dots" id="progress-dots"></div>
-    </div>
+    </header>
 
     <!-- Camera Viewport -->
     <div class="camera-area">
@@ -226,54 +369,67 @@
         <canvas id="proc-canvas"></canvas>
         <canvas id="thumb-canvas" width="32" height="32"></canvas>
 
-        <!-- Khung căn chỉnh bình -->
+        <!-- Framing target box -->
         <div class="target-box" id="target-box"></div>
 
-        <!-- Chỉnh độ mờ bóng mờ -->
+        <!-- Ghost opacity slider -->
         <div class="opacity-pill">
-            <span>Bóng mờ:</span>
+            <span>Silhouette:</span>
             <input type="range" id="opacity-slider" min="15" max="85" value="40" oninput="setGhostOpacity(this.value)">
         </div>
 
         <div class="flash" id="flash"></div>
 
-        <!-- Hướng dẫn & Đếm ngược -->
+        <!-- Guide bar & Minimalist iOS Shutter Button -->
         <div class="guide-bar">
-            <div id="guide-text">Đang khởi động camera...</div>
+            <div id="guide-text">Initializing camera feed...</div>
             <div class="timer-wrap">
                 <div id="timer-bar"></div>
             </div>
             <div class="bottom-actions">
-                <button class="snap-btn" id="manual-btn" onclick="triggerManualCapture()">
-                    📸 Bấm Chụp Ngay
+                <button class="ios-shutter-btn" id="manual-btn" onclick="triggerManualCapture()" aria-label="Shutter Button">
+                    <span class="ios-shutter-inner"></span>
                 </button>
             </div>
         </div>
 
-        <!-- Màn hình chuyển đổi giữa các góc -->
+        <!-- View Transition Screen -->
         <div id="transition-screen">
-            <div class="trans-check">✅</div>
-            <div class="trans-done" id="trans-done-text"></div>
-            <div class="trans-next" id="trans-next-text"></div>
+            <span class="trans-badge">Angle Recorded</span>
+            <div class="trans-done" id="trans-done-text">Front View Captured</div>
+            <div class="trans-next" id="trans-next-text">Rotate vase to: Back View</div>
             <div class="trans-countdown" id="trans-countdown">3</div>
         </div>
 
-        <!-- Màn hình hoàn tất -->
+        <!-- Capture Complete Screen -->
         <div id="done-screen">
-            <div class="done-icon">🎉</div>
-            <div class="done-text">Đã Chụp Đủ 4 Góc!</div>
-            <div class="done-sub">Ảnh đã được gửi lên hệ thống phân tích. Bạn có thể đóng tab này và xem kết quả trên máy tính.</div>
-            <div id="done-return-tag" style="display:none; font-size:13px; color:#38bdf8; background:#1e293b; padding:6px 14px; border-radius:20px; border:1px solid #0284c7;"></div>
+            <span class="done-badge">Completed</span>
+            <h2 class="done-title">All 4 Views Recorded</h2>
+            <p class="done-sub">Your images have been submitted for forensic AI inspection and defect analysis.</p>
+            <div id="done-return-tag" style="display:none; font-size:12px; color:var(--text-muted); padding:6px 14px; border-radius:6px; background:rgba(232, 223, 213, 0.08); border:1px solid var(--border-hud);"></div>
+            <a id="btn-report-link" href="#" class="btn-view-report" target="_blank">View Forensic Report</a>
         </div>
     </div>
 
 <script>
+// Dynamic Viewport Height Lock cho mobile (chống che nút chụp bởi thanh điều hướng)
+function setAppHeight() {
+    document.documentElement.style.setProperty('--app-height', `${window.innerHeight}px`);
+}
+window.addEventListener('resize', setAppHeight);
+window.addEventListener('orientationchange', setAppHeight);
+setAppHeight();
+
 // ── Server Variables ────────────────────────────────────────────────────────
 const SESSION_ID = "{{ session_id }}";
 const PRODUCT_ID = "{{ product_id }}";
 const RETURN_ID = {{ return_id | tojson if return_id is defined and return_id is not none else 'null' }};
 const CLOUDINARY_CLOUD_NAME = "{{ cloudinary_cloud_name or '' }}";
 const VIEW_CLOUDINARY_MAP = {
+    "front": "front",
+    "back": "back",
+    "left": "left",
+    "right": "right",
     "truoc": "front",
     "sau": "back",
     "trai": "left",
@@ -383,14 +539,14 @@ function loadGhost() {
     ghost.onerror = () => {
         // Nếu tải từ Cloudinary thất bại, thử fallback về server local
         if (ghost.src.includes('res.cloudinary.com')) {
-            console.warn(`[Ghost] Không tải được từ Cloudinary, fallback về local: /ghost/${PRODUCT_ID}/${view}_nb.png`);
-            ghost.src = `/ghost/${PRODUCT_ID}/${view}_nb.png?t=${Date.now()}`;
+            console.warn(`[Ghost] Cloudinary load failed, fallback to local: /ghost/${PRODUCT_ID}/${view}.png`);
+            ghost.src = `/ghost/${PRODUCT_ID}/${view}.png?t=${Date.now()}`;
             return;
         }
         // Fallback sang mẫu mặc định '1' nếu PRODUCT_ID không tải được
         if (PRODUCT_ID !== '1' && !ghost.src.includes('/ghost/1/')) {
-            console.warn(`[Ghost] Fallback sang mẫu chuẩn mặc định 1`);
-            ghost.src = `/ghost/1/${view}_nb.png?t=${Date.now()}`;
+            console.warn(`[Ghost] Fallback to default model B1`);
+            ghost.src = `/ghost/B1/${view}.png?t=${Date.now()}`;
             return;
         }
         ghost.style.display = 'none';
@@ -401,7 +557,7 @@ function loadGhost() {
         // Tải trực tiếp ảnh chuẩn bóng mờ từ Cloudinary CDN của hệ thống Ceramic Shop
         ghost.src = `https://res.cloudinary.com/${CLOUDINARY_CLOUD_NAME}/image/upload/ceramic_shop/products/${PRODUCT_ID}/preprocess/${cloudSlot}.png?t=${Date.now()}`;
     } else {
-        ghost.src = `/ghost/${PRODUCT_ID}/${view}_nb.png?t=${Date.now()}`;
+        ghost.src = `/ghost/${PRODUCT_ID}/${view}.png?t=${Date.now()}`;
     }
     ghost.style.display = 'block';
 }
@@ -410,27 +566,68 @@ function setGhostOpacity(val) {
     ghost.style.opacity = val / 100;
 }
 
-// ── Start Camera (iOS Safari HTTPS Checked) ─────────────────────────────────
+// ── Start Camera (Tương thích 100% Android Chrome & iOS Safari) ─────────────
 
 async function startCamera() {
     try {
-        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-            throw new Error("Trình duyệt Safari/iOS yêu cầu kết nối HTTPS bảo mật để mở camera. Vui lòng quét mã QR từ link HTTPS!");
+        const ua = navigator.userAgent || '';
+        const isInApp = /Zalo|FBAN|FBAV|Instagram|Line/i.test(ua);
+        if (isInApp) {
+            console.warn('[Camera] In-app browser detected.');
         }
 
-        const stream = await navigator.mediaDevices.getUserMedia({
-            video: {
-                facingMode: 'environment',
-                width: { ideal: 1920, max: 4032 },
-                height: { ideal: 1080, max: 3024 }
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            const extraTip = isInApp
+                ? " Bạn đang mở trong Zalo/Facebook: hãy bấm dấu 3 chấm (⋮) ở góc trên bên phải và chọn 'Mở bằng Chrome' hoặc 'Mở bằng trình duyệt'."
+                : " Camera access requires a secure HTTPS connection or Cloudflare Tunnel.";
+            throw new Error("Không thể truy cập camera!" + extraTip);
+        }
+
+        // Cascading Fallback Constraints: Hoạt động trơn tru trên mọi dòng máy Android & iOS
+        const constraintTiers = [
+            // Tier 1: Ưu tiên camera sau sắc nét (ideal mềm, không ép max cứng để tránh OverconstrainedError trên Android)
+            {
+                video: {
+                    facingMode: { ideal: 'environment' },
+                    width: { ideal: 1920 },
+                    height: { ideal: 1080 }
+                }
+            },
+            // Tier 2: Camera sau với độ phân giải mặc định của phần cứng
+            {
+                video: {
+                    facingMode: { ideal: 'environment' }
+                }
+            },
+            // Tier 3: Bất kỳ camera nào khả dụng trên thiết bị
+            {
+                video: true
             }
-        });
+        ];
+
+        let stream = null;
+        let lastErr = null;
+        for (const c of constraintTiers) {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia(c);
+                if (stream) break;
+            } catch (err) {
+                lastErr = err;
+                console.warn('[Camera] Tier constraint failed, thử tier tiếp theo:', c, err);
+            }
+        }
+
+        if (!stream) {
+            throw (lastErr || new Error("Unable to initialize camera on this device."));
+        }
 
         video.srcObject = stream;
+        video.setAttribute('playsinline', '');
+        video.setAttribute('webkit-playsinline', '');
         await video.play();
 
-        // Hỗ trợ chạm vào màn hình để kích hoạt lấy nét (Tap-to-Focus)
-        video.addEventListener('click', async () => {
+        // Hỗ trợ chạm vào màn hình để kích hoạt lấy nét (Tap-to-Focus) trên cả Android & iOS
+        const triggerFocus = async () => {
             try {
                 const track = stream.getVideoTracks()[0];
                 const caps = track.getCapabilities ? track.getCapabilities() : {};
@@ -438,17 +635,30 @@ async function startCamera() {
                     await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
                 }
             } catch (_) {}
-        });
+        };
+        video.addEventListener('click', triggerFocus);
+        const camArea = document.querySelector('.camera-area');
+        if (camArea) camArea.addEventListener('click', triggerFocus);
 
         procCanvas.width = PROC_W;
         procCanvas.height = PROC_H;
         lastTimestamp = performance.now();
 
-        guideText.textContent = '📦 Đưa bình gốm vào giữa khung ngắm';
+        guideText.textContent = 'Position the ceramic vase inside the target frame';
         requestAnimationFrame(loop);
     } catch (e) {
-        guideText.textContent = '❌ ' + e.message;
-        alert(e.message);
+        let msg = e.message || 'Unknown camera error';
+        if (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError') {
+            msg = 'Camera permission denied. Please allow camera access in browser settings.';
+        } else if (e.name === 'NotFoundError' || e.name === 'DevicesNotFoundError') {
+            msg = 'No camera detected on this device.';
+        } else if (e.name === 'NotReadableError' || e.name === 'TrackStartError') {
+            msg = 'Camera is currently in use by another application.';
+        } else if (e.name === 'OverconstrainedError') {
+            msg = 'Camera resolution unsupported. Attempting fallback stream...';
+        }
+        guideText.textContent = msg;
+        alert(msg);
     }
 }
 
@@ -465,13 +675,13 @@ function processFrame(now) {
     if (isUploading) return;
 
     if (!ghostTemplate) {
-        setGuide('⏳ Đang tải ảnh bóng mờ mẫu sản phẩm...');
+        setGuide('Loading reference silhouette...');
         targetBox.className = 'target-box';
         return;
     }
 
     const viewName = VIEW_LABELS[VIEWS[currentViewIdx]] || 'Mặt này';
-    setGuide(`📦 Căn chỉnh bình khớp bóng mờ [${viewName}] rồi bấm "📸 Bấm Chụp Ngay"`);
+    setGuide(`Align vase within the [${viewName}] silhouette`);
     targetBox.className = 'target-box';
 }
 
@@ -489,7 +699,7 @@ function updateTimerBar(val) {
 async function triggerManualCapture() {
     if (isUploading) return;
     if (!video || video.readyState < 2) {
-        setGuide('⚠️ Camera đang khởi động, vui lòng chờ 1 giây...');
+        setGuide('Camera is initializing, please wait a moment...');
         return;
     }
 
@@ -500,14 +710,14 @@ async function triggerManualCapture() {
     }
 
     isUploading = true;
-    setGuide('📸 Đã chụp! Đang gửi lên máy chủ đối chiếu...');
+    setGuide('Angle captured. Uploading for alignment check...');
 
     try {
         const live = captureCurrentVideoFrame();
         await processCapturedFrame(live.dataUrl);
     } catch (e) {
         console.error('Lỗi chụp ảnh:', e);
-        setGuide('❌ Lỗi gửi ảnh: ' + e.message);
+        setGuide('Capture upload error: ' + e.message);
     } finally {
         isUploading = false;
         if (manualBtn) {
@@ -519,10 +729,40 @@ async function triggerManualCapture() {
 
 function captureCurrentVideoFrame() {
     const capCanvas = document.createElement('canvas');
-    capCanvas.width = video.videoWidth || 1280;
-    capCanvas.height = video.videoHeight || 960;
-    capCanvas.getContext('2d').drawImage(video, 0, 0);
-    return { dataUrl: capCanvas.toDataURL('image/jpeg', 0.95), score: 1.0, quality: 1.0 };
+    const vw = video.videoWidth || 1280;
+    const vh = video.videoHeight || 960;
+    const camArea = video.parentElement;
+
+    let sx = 0, sy = 0, sw = vw, sh = vh;
+    if (camArea && camArea.clientWidth > 0 && camArea.clientHeight > 0) {
+        const dw = camArea.clientWidth;
+        const dh = camArea.clientHeight;
+        const scale = Math.max(dw / vw, dh / vh);
+        sw = dw / scale;
+        sh = dh / scale;
+        sx = Math.max(0, (vw - sw) / 2);
+        sy = Math.max(0, (vh - sh) / 2);
+    }
+
+    // Giữ độ phân giải tối ưu (chuẩn 1440px theo chiều dài nhất) để ảnh cực sắc nét và upload nhanh
+    const maxDim = 1440;
+    let outW = sw, outH = sh;
+    if (outW > maxDim || outH > maxDim) {
+        if (outW > outH) {
+            outH = Math.round(outH * (maxDim / outW));
+            outW = maxDim;
+        } else {
+            outW = Math.round(outW * (maxDim / outH));
+            outH = maxDim;
+        }
+    }
+
+    capCanvas.width = Math.round(outW);
+    capCanvas.height = Math.round(outH);
+    const ctx = capCanvas.getContext('2d');
+    ctx.drawImage(video, sx, sy, sw, sh, 0, 0, capCanvas.width, capCanvas.height);
+
+    return { dataUrl: capCanvas.toDataURL('image/jpeg', 0.92), score: 1.0, quality: 1.0 };
 }
 
 async function processCapturedFrame(dataUrl) {
@@ -531,7 +771,7 @@ async function processCapturedFrame(dataUrl) {
     setTimeout(() => flash.classList.remove('active'), 180);
 
     // 2. Tải lên server và đối chiếu
-    setGuide('⏳ Máy chủ đang đối chiếu hình dáng & đường nét bình gốm...');
+    setGuide('Verifying silhouette alignment with reference model...');
     const ok = await uploadImage(dataUrl, VIEWS[currentViewIdx]);
 
     if (ok) {
@@ -549,9 +789,13 @@ async function processCapturedFrame(dataUrl) {
             if (RETURN_ID) {
                 const returnTag = document.getElementById('done-return-tag');
                 if (returnTag) {
-                    returnTag.textContent = `📋 Mã Phiếu Trả Hàng: #${RETURN_ID}`;
+                    returnTag.textContent = `Ticket ID: #${RETURN_ID}`;
                     returnTag.style.display = 'inline-block';
                 }
+            }
+            const reportBtn = document.getElementById('btn-report-link');
+            if (reportBtn) {
+                reportBtn.href = `/result/${SESSION_ID}`;
             }
         } else {
             // Hiển thị đếm ngược chuyển góc (3s) để khách xoay bình
@@ -562,10 +806,13 @@ async function processCapturedFrame(dataUrl) {
         }
     } else {
         if (navigator.vibrate) try { navigator.vibrate([120, 80, 120]); } catch(_) {}
-        targetBox.className = 'target-box error';
-        setGuide(`❌ ${lastUploadMessage || 'Không khớp sản phẩm mẫu! Vui lòng căn lại.'}`);
+        const isGuidance = lastUploadMessage && (lastUploadMessage.includes('👉') || lastUploadMessage.includes('Căn chỉnh'));
+        targetBox.className = isGuidance ? 'target-box aligning' : 'target-box error';
+        setGuide(isGuidance ? lastUploadMessage : (lastUploadMessage || 'Alignment verification failed. Please realign the vase.'));
         await sleep(3500);
         targetBox.className = 'target-box';
+        const viewName = VIEW_LABELS[VIEWS[currentViewIdx]] || 'Mặt này';
+        setGuide(`Align vase within the [${viewName}] silhouette`);
     }
 }
 
@@ -576,8 +823,8 @@ function showTransition() {
         const doneView = VIEW_LABELS[VIEWS[currentViewIdx - 1]];
         const nextView = VIEW_LABELS[VIEWS[currentViewIdx]];
 
-        document.getElementById('trans-done-text').textContent = `Đã chụp ${doneView}!`;
-        document.getElementById('trans-next-text').textContent = `Hãy xoay bình sang: ${nextView}`;
+        document.getElementById('trans-done-text').textContent = `${doneView} Recorded`;
+        document.getElementById('trans-next-text').textContent = `Rotate vase to: ${nextView}`;
 
         transScreen.classList.add('show');
 
@@ -618,12 +865,12 @@ async function uploadImage(dataUrl, view) {
             lastUploadMessage = '';
             return true;
         } else {
-            lastUploadMessage = data.message || 'Ảnh không khớp sản phẩm mẫu';
+            lastUploadMessage = data.message || 'Image does not match reference vase.';
             return false;
         }
     } catch (e) {
         console.error('Upload error:', e);
-        lastUploadMessage = 'Lỗi kết nối máy chủ';
+        lastUploadMessage = 'Server connection error.';
         return false;
     }
 }

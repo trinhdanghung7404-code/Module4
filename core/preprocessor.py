@@ -21,10 +21,11 @@ from PIL import Image
 import io
 import sys
 import os
+from typing import Tuple, Optional, Union, Dict, Any
 
 _HAS_REMBG = False
 remove = None
-if os.environ.get("USE_REMBG", "0") == "1":
+if os.environ.get("USE_REMBG", "1") == "1":
     try:
         from rembg import remove
         _HAS_REMBG = True
@@ -239,7 +240,8 @@ def detect_specular_mask(
 
     # Gộp lõi và vùng mềm
     mask = cv2.bitwise_or(strong_glare, soft_glare)
-    mask = cv2.bitwise_and(mask, object_mask)
+    inner_mask = cv2.erode(object_mask, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7)))
+    mask = cv2.bitwise_and(mask, inner_mask)
 
     # Chỉ nối các khe nhỏ
     kernel = cv2.getStructuringElement(
@@ -261,7 +263,8 @@ def detect_saturated_mask(bgr_img, object_mask, near_white=250, near_black=5):
     l = lab[:, :, 0]
 
     mask = ((l >= near_white) | (l <= near_black)).astype(np.uint8) * 255
-    mask = cv2.bitwise_and(mask, object_mask)
+    inner_mask = cv2.erode(object_mask, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7)))
+    mask = cv2.bitwise_and(mask, inner_mask)
 
     kernel = np.ones((3, 3), np.uint8)
     mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
@@ -270,11 +273,11 @@ def detect_saturated_mask(bgr_img, object_mask, near_white=250, near_black=5):
 
 def _filter_small_blobs(mask, min_area):
     """Loại các vùng nhỏ lẻ tẻ (khả năng cao là nhiễu hạt, không phải vùng thật)."""
-    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(mask)
     clean = np.zeros_like(mask)
-    for c in contours:
-        if cv2.contourArea(c) >= min_area:
-            cv2.drawContours(clean, [c], -1, 255, -1)
+    for i in range(1, num_labels):
+        if stats[i, cv2.CC_STAT_AREA] >= min_area:
+            clean[labels == i] = 255
     return clean
 
 
@@ -315,72 +318,50 @@ def build_ignore_mask(bgr_img, object_mask):
 # MAIN: chạy thử toàn bộ pipeline trên 1 hoặc 2 ảnh
 # ===============================================================================
 
-def process_and_detect(img_path, label="anh", output_dir="."):
-    bgr = cv2.imread(img_path)
-    if bgr is None:
-        raise FileNotFoundError(f"Không đọc được ảnh: {img_path}")
+def process_and_detect(img_path: str, label: str = "customer_front", output_dir: str = ".", target_size: int = 1024) -> Dict[str, Any]:
+    """
+    Standardized Image Preprocessing and Optical Quality Gate (1024x1024 Pure White Canvas):
+    1. High-fidelity background removal (RGBA transparency preservation or lightweight AI RemBG).
+    2. Synchronous bounding-box centering and scaling to target_size x target_size (pure white [255, 255, 255]).
+    3. Specular glare and saturated pixel scanning directly on the 1024x1024 canvas.
+    4. Export all standardized maps strictly at 1024x1024 with English naming conventions.
+    """
+    canvas_bgr, canvas_mask = clean_rembg_image(img_path, target_size=target_size, return_mask=True)
+    if canvas_bgr is None:
+        raise FileNotFoundError(f"[ERROR] Failed to read or preprocess image: {img_path}")
 
-    # ---- PHA 1: tiền xử lý (2 bước an toàn, luôn chạy) ----
-    nobg, mask = remove_background_gray(bgr)
-    cropped, mask_cropped = crop_to_object(nobg, mask)
+    result = build_ignore_mask(canvas_bgr, canvas_mask)
+    overlay = draw_specular_contours(canvas_bgr, result["specular_mask"])
 
-    # ---- [TẠM TẮT] resize đồng bộ + cân sáng nhẹ ----
-    # Muốn test 2 bước này: bỏ comment 2 hàm ở PHA 1 phía trên, rồi bỏ comment
-    # đúng 2 dòng dưới đây (lưu ý match_lightness cần 1 ảnh reference thật,
-    # ví dụ ảnh gốc shop, không phải chính ảnh nó -- ví dụ dưới chỉ minh hoạ cú pháp):
-    #
-    # cropped, _, mask_cropped, _ = resize_synchronized(cropped, cropped, mask_cropped, mask_cropped)
-    # cropped = match_lightness(cropped, anh_tham_chieu, mask_cropped, mask_tham_chieu)
-
-    # ---- PHA 2: detect vùng nghi ngờ (quét lóa sáng) ----
-    result = build_ignore_mask(cropped, mask_cropped)
-    overlay = draw_specular_contours(cropped, result["specular_mask"])
-
-    cv2.imwrite(f"{output_dir}/{label}_processed.png", cropped)
+    os.makedirs(output_dir, exist_ok=True)
+    cv2.imwrite(f"{output_dir}/{label}_processed.png", canvas_bgr)
     cv2.imwrite(f"{output_dir}/{label}_specular_mask.png", result["specular_mask"])
     cv2.imwrite(f"{output_dir}/{label}_saturated_mask.png", result["saturated_mask"])
     cv2.imwrite(f"{output_dir}/{label}_ignore_mask.png", result["ignore_mask"])
     cv2.imwrite(f"{output_dir}/{label}_overlay_contour.png", overlay)
 
-    print(f"[{label}] ignore_ratio = {result['ignore_ratio']*100:.2f}%  "
-          f"should_reshoot = {result['should_reshoot']}")
+    print(f"[PREPROCESS] [{label}] Standardized shape: {canvas_bgr.shape[:2]} | ignore_ratio: {result['ignore_ratio']*100:.2f}% | reshoot_required: {result['should_reshoot']}")
     return result
 
 
 if __name__ == "__main__":
-    # ---- CẤU HÌNH MẶC ĐỊNH ----
-    # Input: anh_goc.jpg + anh_khach.jpg (thiếu 1 trong 2 thì vẫn chạy cái còn lại)
-    # Output: prefix tự động là goc_ hoặc khach_ dựa trên tên input file
-    
     default_files = {
-        "anh_goc.jpg": "goc",      # input_file: output_prefix
-        "anh_khach.jpg": "khach",
+        "reference_front.jpg": "reference_front",
+        "customer_front.jpg": "customer_front",
     }
     
-    # Nếu truyền tham số từ command line, chỉ chạy file đó
     if len(sys.argv) > 1:
-        img_path = sys.argv[1]
-        # Tự động extract prefix từ tên file
-        # ví dụ: "anh_khach.jpg" → "khach", "anh_goc.jpg" → "goc"
-        if "khach" in img_path.lower():
-            label = "khach"
-        elif "goc" in img_path.lower():
-            label = "goc"
-        else:
-            label = sys.argv[2] if len(sys.argv) > 2 else "anh"
-        
-        process_and_detect(img_path, label)
+        input_path = sys.argv[1]
+        input_label = sys.argv[2] if len(sys.argv) > 2 else "sample"
+        process_and_detect(input_path, input_label)
     else:
-        # Chạy mặc định: cả 2 file anh_goc.jpg + anh_khach.jpg (nếu tồn tại)
         for img_file, prefix in default_files.items():
-            try:
+            if os.path.exists(img_file):
                 process_and_detect(img_file, prefix)
-            except FileNotFoundError:
-                print(f"⚠️  Không tìm thấy {img_file}, bỏ qua...")
 
 
 # ===============================================================================
-# PHA 3: CHUẨN HÓA ẢNH THÔ SANG 1024x1024 QUA REMBG BIREFNET
+# STANDARDIZED CANVAS PREPROCESSOR (1024x1024 WHITE CANVAS VIA REMBG / RGBA)
 # ===============================================================================
 
 _REMBG_SESSION = None
@@ -390,66 +371,131 @@ def get_rembg_session():
     if _REMBG_SESSION is None:
         try:
             from rembg import new_session
-            _REMBG_SESSION = new_session('birefnet-general')
+            _REMBG_SESSION = new_session('u2net')
         except Exception:
             try:
                 from rembg import new_session
-                _REMBG_SESSION = new_session('u2net')
+                _REMBG_SESSION = new_session('u2netp')
             except Exception:
                 _REMBG_SESSION = False
     return _REMBG_SESSION
 
 
-def clean_rembg_image(img_path: str, target_size: int = 1024) -> np.ndarray:
+def clean_rembg_image(
+    img_path: str,
+    target_size: int = 1024,
+    return_mask: bool = False
+) -> Union[Optional[np.ndarray], Tuple[Optional[np.ndarray], Optional[np.ndarray]]]:
     """
-    Tách nền thông minh độ nét cao:
-    1. Chạy BiRefNet AI để tách vật thể chính (bình gốm sứ), tự động loại bỏ bàn xoay/đế gỗ
-    2. Lọc chỉ giữ lại đối tượng liên thông lớn nhất (thân bình gốm sứ)
-    3. Cắt sát theo Bounding Box của bình (kèm lề an toàn 15px)
-    4. Căn giữa và chuẩn hóa lên canvas nền trắng target_size x target_size (lề chuẩn 48px)
+    High-fidelity background removal and canvas standardization (target_size x target_size):
+    1. Native RGBA image (transparent _nb.png from Cloudinary):
+       Instantaneous transparency preservation (0 RAM overhead, 0 AI latency).
+    2. Standard 3-channel BGR:
+       If USE_REMBG=1, runs RemBG. Otherwise uses robust C++ contrast morphology segmentation.
+    3. Synchronously crop both BGR and binary Mask tightly along object bounding box via cv2.boundingRect.
+    4. Aspect-ratio preserving scaling onto fixed pure white canvas (255, 255, 255) with 48px padding.
     """
-    bgr = cv2.imread(img_path)
-    if bgr is None:
-        return None
+    raw_img = cv2.imread(img_path, cv2.IMREAD_UNCHANGED)
+    if raw_img is None:
+        return (None, None) if return_mask else None
 
-    session = get_rembg_session()
-    if session:
-        from rembg import remove
-        rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
-        pil_img = Image.fromarray(rgb)
-        out_pil = remove(pil_img, session=session, only_mask=True)
-        mask = np.array(out_pil)
+    clean_bgr = None
+    mask = None
+
+    # CASE A: Native RGBA image with pre-existing transparency
+    if len(raw_img.shape) == 3 and raw_img.shape[2] == 4:
+        alpha = raw_img[:, :, 3]
+        if np.any(alpha < 240):
+            bgr = raw_img[:, :, :3]
+            alpha_f = alpha.astype(np.float32) / 255.0
+            clean_bgr = (bgr.astype(np.float32) * alpha_f[:, :, None] + 255.0 * (1.0 - alpha_f[:, :, None])).astype(np.uint8)
+            mask = (alpha > 128).astype(np.uint8) * 255
+
+    # CASE B: Standard RGB/BGR image requiring background segmentation
+    if clean_bgr is None:
+        bgr = raw_img[:, :, :3] if len(raw_img.shape) == 3 and raw_img.shape[2] == 4 else raw_img
         
-        num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(mask)
-        if num_labels > 1:
-            largest_label = 1 + np.argmax(stats[1:, cv2.CC_STAT_AREA])
-            mask = (labels == largest_label).astype(np.uint8) * 255
-            
-        mask_smooth = cv2.GaussianBlur(mask, (3, 3), 0)
-        alpha = (mask_smooth.astype(np.float32) / 255.0)[:, :, np.newaxis]
-        clean_bgr = (bgr.astype(np.float32) * alpha + 255.0 * (1.0 - alpha)).astype(np.uint8)
+        # Safe downscaling to avoid memory pressure on large smartphone captures
+        h_orig, w_orig = bgr.shape[:2]
+        max_dim = max(h_orig, w_orig)
+        if max_dim > 1024:
+            scale_safe = 1024.0 / float(max_dim)
+            bgr = cv2.resize(bgr, (int(w_orig * scale_safe), int(h_orig * scale_safe)), interpolation=cv2.INTER_AREA)
+
+        if os.environ.get("USE_REMBG", "1") == "1":
+            session = get_rembg_session()
+            if session:
+                try:
+                    from rembg import remove
+                    rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
+                    out_pil = remove(Image.fromarray(rgb), session=session, only_mask=True)
+                    mask = np.array(out_pil)
+                except Exception as e:
+                    print(f"[WARN] RemBG execution failed ({e}), using morphology fallback.")
+                    mask = None
         
-        coords = np.argwhere(mask > 128)
-        if len(coords) > 0:
-            y_min, x_min = coords.min(axis=0)
-            y_max, x_max = coords.max(axis=0)
-            margin = 15
-            y_min = max(0, y_min - margin)
-            x_min = max(0, x_min - margin)
-            y_max = min(clean_bgr.shape[0], y_max + margin)
-            x_max = min(clean_bgr.shape[1], x_max + margin)
-            clean_bgr = clean_bgr[y_min:y_max+1, x_min:x_max+1]
+        if mask is not None:
+            # Cut table contact shadow (bottom 4% of object bounding box resting on table)
+            nz = cv2.findNonZero(mask)
+            if nz is not None:
+                bx_t, by_t, bw_t, bh_t = cv2.boundingRect(nz)
+                table_cut_y = by_t + int(bh_t * 0.96)
+                mask[table_cut_y:, :] = 0
+
+            contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            if contours:
+                c = max(contours, key=cv2.contourArea)
+                mask_clean = np.zeros_like(mask)
+                cv2.drawContours(mask_clean, [c], -1, 255, -1)
+                mask = mask_clean
+                
+            # Sharp alpha masking to completely eliminate gray halo around rim and foot
+            alpha_f = (mask > 128).astype(np.float32)
+            clean_bgr = (bgr.astype(np.float32) * alpha_f[:, :, None] + 255.0 * (1.0 - alpha_f[:, :, None])).astype(np.uint8)
+        else:
+            # High-performance C++ morphology background segmentation (zero memory overhead)
+            corner_bgr = np.median(bgr[:25, :25], axis=(0, 1)).astype(np.uint8)
+            diff_map = cv2.absdiff(bgr, corner_bgr)
+            gray_diff = cv2.cvtColor(diff_map, cv2.COLOR_BGR2GRAY)
+            _, mask = cv2.threshold(gray_diff, 20, 255, cv2.THRESH_BINARY)
+            mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9)))
+            alpha_f = (mask > 128).astype(np.float32)
+            clean_bgr = (bgr.astype(np.float32) * alpha_f[:, :, None] + 255.0 * (1.0 - alpha_f[:, :, None])).astype(np.uint8)
+
+    # Crop tightly to object bounding box via cv2.boundingRect (zero memory allocation)
+    mask_cropped = None
+    if mask is not None:
+        bx, by, bw, bh = cv2.boundingRect(mask)
+        if bw > 20 and bh > 20:
+            margin = 2 # Tight crop to prevent table/room border leakage
+            y_min = max(0, by - margin)
+            x_min = max(0, bx - margin)
+            y_max = min(clean_bgr.shape[0], by + bh + margin)
+            x_max = min(clean_bgr.shape[1], bx + bw + margin)
+            clean_bgr = clean_bgr[y_min:y_max, x_min:x_max]
+            mask_cropped = mask[y_min:y_max, x_min:x_max]
+        else:
+            mask_cropped = mask.copy()
     else:
-        clean_bgr = bgr.copy()
+        mask_cropped = np.full(clean_bgr.shape[:2], 255, dtype=np.uint8)
 
+    # Center and scale onto fixed target_size x target_size pure white canvas
     h, w = clean_bgr.shape[:2]
     padding = 48
-    scale = min((target_size - 2 * padding) / h, (target_size - 2 * padding) / w)
+    scale = min((target_size - 2 * padding) / float(h), (target_size - 2 * padding) / float(w))
     nh, nw = int(h * scale), int(w * scale)
-    resized = cv2.resize(clean_bgr, (nw, nh), interpolation=cv2.INTER_AREA)
+    resized_bgr = cv2.resize(clean_bgr, (nw, nh), interpolation=cv2.INTER_AREA)
+    resized_mask = cv2.resize(mask_cropped, (nw, nh), interpolation=cv2.INTER_NEAREST)
 
-    canvas = np.ones((target_size, target_size, 3), dtype=np.uint8) * 255
+    canvas_bgr = np.full((target_size, target_size, 3), 255, dtype=np.uint8)
+    canvas_mask = np.zeros((target_size, target_size), dtype=np.uint8)
+
     y_off = (target_size - nh) // 2
     x_off = (target_size - nw) // 2
-    canvas[y_off:y_off+nh, x_off:x_off+nw] = resized
-    return canvas
+    canvas_bgr[y_off:y_off+nh, x_off:x_off+nw] = resized_bgr
+    canvas_mask[y_off:y_off+nh, x_off:x_off+nw] = resized_mask
+    canvas_bgr[canvas_mask == 0] = [255, 255, 255]
+
+    if return_mask:
+        return canvas_bgr, canvas_mask
+    return canvas_bgr
